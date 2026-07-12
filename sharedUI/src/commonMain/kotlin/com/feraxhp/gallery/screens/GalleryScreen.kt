@@ -14,9 +14,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.feraxhp.gallery.repository.ImageRepository
 import com.feraxhp.gallery.viewmodel.GalleryViewModel
-import com.feraxhp.ktheme.DynamicTheme
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GalleryScreen(repository: ImageRepository) {
     val viewModel: GalleryViewModel = viewModel { GalleryViewModel(repository) }
@@ -27,33 +25,27 @@ fun GalleryScreen(repository: ImageRepository) {
         viewModel.loadImages()
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text("Galería MVVM") })
+    if (isLoading && images.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
         }
-    ) { padding ->
-        if (isLoading && images.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                items(images, key = { it.id }) { image ->
-                    AsyncImage(
-                        model = image.uri,
-                        contentDescription = image.name,
-                        modifier = Modifier
-                            .aspectRatio(1f)
-                            .fillMaxWidth(),
-                        contentScale = ContentScale.Crop
-                    )
-                }
+    } else {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            items(images, key = { it.id }) { image ->
+                AsyncImage(
+                    model = image.uri,
+                    contentDescription = image.name,
+                    modifier = Modifier
+                        .aspectRatio(1f)
+                        .fillMaxWidth(),
+                    contentScale = ContentScale.Crop
+                )
             }
         }
     }

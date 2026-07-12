@@ -14,15 +14,23 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 package com.feraxhp.gallery
 
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Collections
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
 import com.feraxhp.gallery.navigation.Destination
 import com.feraxhp.gallery.repository.ImageRepository
+import com.feraxhp.gallery.screens.AlbumsScreen
 import com.feraxhp.gallery.screens.GalleryScreen
 import com.feraxhp.gallery.screens.PermissionsScreen
 import com.feraxhp.ktheme.DynamicTheme
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun App(
     repository: ImageRepository,
@@ -43,24 +51,82 @@ fun App(
         }
     }
 
+    val currentDestination = backStack.lastOrNull()
+
     DynamicTheme {
-        NavDisplay(
-            backStack = backStack,
-            onBack = {
-                if (backStack.size > 1) {
-                    backStack = backStack.dropLast(1)
+        Scaffold(
+            topBar = {
+                val title = when (currentDestination) {
+                    Destination.Permissions -> "Permisos"
+                    Destination.Gallery -> "Fotos"
+                    Destination.Albums -> "Álbumes"
+                    null -> ""
                 }
+                TopAppBar(title = { Text(title) })
             },
-            entryProvider = { key: Destination ->
-                when (key) {
-                    Destination.Permissions -> NavEntry(key) {
-                        PermissionsScreen(onRequestPermission = onRequestPermission)
-                    }
-                    Destination.Gallery -> NavEntry(key) {
-                        GalleryScreen(repository = repository)
+            bottomBar = {
+                if (hasPermission && (currentDestination == Destination.Gallery || currentDestination == Destination.Albums)) {
+                    NavigationBar {
+                        NavigationBarItem(
+                            selected = currentDestination == Destination.Gallery,
+                            onClick = {
+                                if (currentDestination != Destination.Gallery) {
+                                    backStack = listOf(Destination.Gallery)
+                                }
+                            },
+                            icon = { Icon(Icons.Default.PhotoLibrary, contentDescription = "Fotos") },
+                            label = { Text("Fotos") }
+                        )
+                        NavigationBarItem(
+                            selected = currentDestination == Destination.Albums,
+                            onClick = {
+                                if (currentDestination != Destination.Albums) {
+                                    backStack = listOf(Destination.Albums)
+                                }
+                            },
+                            icon = { Icon(Icons.Default.Collections, contentDescription = "Álbumes") },
+                            label = { Text("Álbumes") }
+                        )
                     }
                 }
             }
-        )
+        ) { padding ->
+            NavDisplay(
+                modifier = Modifier.padding(padding),
+                backStack = backStack,
+                onBack = {
+                    if (backStack.size > 1) {
+                        backStack = backStack.dropLast(1)
+                    }
+                },
+                entryProvider = { key: Destination ->
+                    when (key) {
+                        Destination.Permissions -> NavEntry(key) {
+                            PermissionsScreen(onRequestPermission = onRequestPermission)
+                        }
+                        Destination.Gallery -> NavEntry(key) {
+                            GalleryScreen(repository = repository)
+                        }
+                        Destination.Albums -> NavEntry(key) {
+                            AlbumsScreen(repository = repository)
+                        }
+                    }
+                }
+            )
+        }
     }
+}
+
+@androidx.compose.ui.tooling.preview.Preview
+@Composable
+fun AppPreview() {
+    val mockRepository = object : ImageRepository {
+        override suspend fun getImages(): List<com.feraxhp.gallery.model.GalleryImage> = emptyList()
+        override suspend fun getAlbums(): List<com.feraxhp.gallery.model.Album> = emptyList()
+    }
+    App(
+        repository = mockRepository,
+        hasPermission = true,
+        onRequestPermission = {}
+    )
 }

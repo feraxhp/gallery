@@ -8,4 +8,6 @@ sealed interface Destination {
     data object Permissions : Destination
     @Serializable
     data object Gallery : Destination
+    @Serializable
+    data object Albums : Destination
 }

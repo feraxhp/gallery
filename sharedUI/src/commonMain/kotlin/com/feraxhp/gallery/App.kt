@@ -14,83 +14,53 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 package com.feraxhp.gallery
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import coil3.compose.AsyncImage
+import androidx.navigation3.runtime.NavEntry
+import androidx.navigation3.ui.NavDisplay
+import com.feraxhp.gallery.navigation.Destination
 import com.feraxhp.gallery.repository.ImageRepository
-import com.feraxhp.gallery.viewmodel.GalleryViewModel
+import com.feraxhp.gallery.screens.GalleryScreen
+import com.feraxhp.gallery.screens.PermissionsScreen
 import com.feraxhp.ktheme.DynamicTheme
-import androidx.compose.ui.tooling.preview.Preview
-import com.feraxhp.gallery.model.GalleryImage
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun App(repository: ImageRepository) {
-    val viewModel: GalleryViewModel = viewModel { GalleryViewModel(repository) }
-    val images by viewModel.images.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
+fun App(
+    repository: ImageRepository,
+    hasPermission: Boolean,
+    onRequestPermission: () -> Unit
+) {
+    var backStack by remember {
+        mutableStateOf(
+            listOf<Destination>(
+                if (hasPermission) Destination.Gallery else Destination.Permissions
+            )
+        )
+    }
 
-    LaunchedEffect(Unit) {
-        viewModel.loadImages()
+    LaunchedEffect(hasPermission) {
+        if (hasPermission && backStack.lastOrNull() == Destination.Permissions) {
+            backStack = listOf(Destination.Gallery)
+        }
     }
 
     DynamicTheme {
-        Scaffold(
-            topBar = {
-                TopAppBar(title = { Text("Galería MVVM") })
-            }
-        ) { padding ->
-            if (isLoading && images.isEmpty()) {
-                Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+        NavDisplay(
+            backStack = backStack,
+            onBack = {
+                if (backStack.size > 1) {
+                    backStack = backStack.dropLast(1)
                 }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                    ,
-                    contentPadding = PaddingValues(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    items(images, key = { it.id }) { image ->
-                        AsyncImage(
-                            model = image.uri,
-                            contentDescription = image.name,
-                            modifier = Modifier
-                                .aspectRatio(1f)
-                                .fillMaxWidth()
-                                .clip(shape = MaterialTheme.shapes.medium)
-                            ,
-                            contentScale = ContentScale.Crop
-                        )
+            },
+            entryProvider = { key: Destination ->
+                when (key) {
+                    Destination.Permissions -> NavEntry(key) {
+                        PermissionsScreen(onRequestPermission = onRequestPermission)
+                    }
+                    Destination.Gallery -> NavEntry(key) {
+                        GalleryScreen(repository = repository)
                     }
                 }
             }
-        }
-    }
-}
-
-@Preview
-@Composable
-fun AppPreview() {
-    val mockRepository = object : ImageRepository {
-        override suspend fun getImages(): List<GalleryImage> = listOf(
-            GalleryImage(1, "https://example.com/1.jpg", "Image 1"),
-            GalleryImage(2, "https://example.com/2.jpg", "Image 2")
         )
     }
-    App(mockRepository)
 }

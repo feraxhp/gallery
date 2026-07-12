@@ -52,8 +52,12 @@ class AppActivity : ComponentActivity() {
                 hasPermission = isGranted
             }
 
-            LaunchedEffect(Unit) {
-                if (!hasPermission) {
+            val repository = remember { AndroidImageRepository(context) }
+
+            App(
+                repository = repository,
+                hasPermission = hasPermission,
+                onRequestPermission = {
                     val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         Manifest.permission.READ_MEDIA_IMAGES
                     } else {
@@ -61,14 +65,7 @@ class AppActivity : ComponentActivity() {
                     }
                     launcher.launch(permission)
                 }
-            }
-
-            if (hasPermission) {
-                val repository = remember { AndroidImageRepository(context) }
-                App(repository)
-            } else {
-                // Podrías mostrar un mensaje pidiendo permisos
-            }
+            )
         }
     }
 }

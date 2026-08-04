@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.metadata
 import androidx.navigation3.ui.LocalNavAnimatedContentScope
@@ -61,9 +62,15 @@ fun App(
     }
 
     val currentDestination = backStack.lastOrNull()
+    val isDetail = currentDestination is Destination.Detail
+
+    val appBarContainerColor by animateColorAsState(if (isDetail) Color.Black else MaterialTheme.colorScheme.surface)
+    val appBarContentColor by animateColorAsState(if (isDetail) Color.White else MaterialTheme.colorScheme.onSurface)
+    val scaffoldContainerColor by animateColorAsState(if (isDetail) Color.Black else MaterialTheme.colorScheme.background)
 
     DynamicTheme {
         Scaffold(
+            containerColor = scaffoldContainerColor,
             topBar = {
                 val title = when (currentDestination) {
                     Destination.Permissions -> "Permisos"
@@ -75,6 +82,12 @@ fun App(
                 }
                 TopAppBar(
                     title = { Text(title) },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = appBarContainerColor,
+                        titleContentColor = appBarContentColor,
+                        navigationIconContentColor = appBarContentColor,
+                        actionIconContentColor = appBarContentColor
+                    ),
                     navigationIcon = {
                         if (backStack.size > 1) {
                             IconButton(onClick = { backStack = backStack.dropLast(1) }) {
@@ -88,28 +101,34 @@ fun App(
                 )
             },
             bottomBar = {
-                if (hasPermission && (currentDestination == Destination.Gallery || currentDestination == Destination.Albums)) {
-                    NavigationBar {
-                        NavigationBarItem(
-                            selected = currentDestination == Destination.Gallery,
-                            onClick = {
-                                if (currentDestination != Destination.Gallery) {
-                                    backStack = listOf(Destination.Gallery)
-                                }
-                            },
-                            icon = { Icon(Icons.Default.PhotoLibrary, contentDescription = "Fotos") },
-                            label = { Text("Fotos") }
-                        )
-                        NavigationBarItem(
-                            selected = currentDestination == Destination.Albums || currentDestination is Destination.AlbumGallery,
-                            onClick = {
-                                if (currentDestination != Destination.Albums) {
-                                    backStack = listOf(Destination.Albums)
-                                }
-                            },
-                            icon = { Icon(Icons.Default.Collections, contentDescription = "Álbumes") },
-                            label = { Text("Álbumes") }
-                        )
+                val showBottomBar = hasPermission && (currentDestination == Destination.Gallery || currentDestination == Destination.Albums || isDetail)
+                if (showBottomBar) {
+                    NavigationBar(
+                        containerColor = if (isDetail) Color.Black else MaterialTheme.colorScheme.surface,
+                        contentColor = if (isDetail) Color.White else MaterialTheme.colorScheme.onSurface
+                    ) {
+                        if (!isDetail) {
+                            NavigationBarItem(
+                                selected = currentDestination == Destination.Gallery,
+                                onClick = {
+                                    if (currentDestination != Destination.Gallery) {
+                                        backStack = listOf(Destination.Gallery)
+                                    }
+                                },
+                                icon = { Icon(Icons.Default.PhotoLibrary, contentDescription = "Fotos") },
+                                label = { Text("Fotos") }
+                            )
+                            NavigationBarItem(
+                                selected = currentDestination == Destination.Albums || currentDestination is Destination.AlbumGallery,
+                                onClick = {
+                                    if (currentDestination != Destination.Albums) {
+                                        backStack = listOf(Destination.Albums)
+                                    }
+                                },
+                                icon = { Icon(Icons.Default.Collections, contentDescription = "Álbumes") },
+                                label = { Text("Álbumes") }
+                            )
+                        }
                     }
                 }
             }

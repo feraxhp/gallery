@@ -13,7 +13,8 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
         val images = mutableListOf<GalleryImage>()
         val projection = arrayOf(
             MediaStore.Images.Media._ID,
-            MediaStore.Images.Media.DISPLAY_NAME
+            MediaStore.Images.Media.DISPLAY_NAME,
+            MediaStore.Images.Media.DATE_ADDED
         )
 
         val query = context.contentResolver.query(
@@ -27,16 +28,18 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
         query?.use { cursor ->
             val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
             val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
+            val dateAddedColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idColumn)
                 val name = cursor.getString(nameColumn)
+                val dateAdded = cursor.getLong(dateAddedColumn)
                 val contentUri = ContentUris.withAppendedId(
                     MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                     id
                 ).toString()
 
-                images.add(GalleryImage(id, contentUri, name))
+                images.add(GalleryImage(id, contentUri, name, dateAdded))
             }
         }
         images

@@ -64,7 +64,7 @@ fun DetailScreen(
 
     LaunchedEffect(isCentered) {
         if (isCentered) {
-            delay(500)
+            delay(150)
             showIndicator = false
         } else {
             showIndicator = true

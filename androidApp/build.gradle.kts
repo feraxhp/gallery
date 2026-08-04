@@ -31,4 +31,7 @@ kotlin {
 dependencies {
     implementation(project(":sharedUI"))
     implementation(libs.androidx.activityCompose)
+    implementation(libs.coilCompose)
+    implementation(libs.coilSingleton)
+    implementation(libs.coilVideo)
 }

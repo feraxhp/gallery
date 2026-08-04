@@ -2,6 +2,7 @@ package com.feraxhp.gallery.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.touchlab.kermit.Logger
 import com.feraxhp.gallery.model.Album
 import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.repository.ImageRepository
@@ -12,6 +13,7 @@ import kotlinx.coroutines.launch
 
 class GalleryViewModel(private val repository: ImageRepository) : ViewModel() {
 
+    private val logger = Logger.withTag("GalleryViewModel")
     private val _images = MutableStateFlow<List<GalleryImage>>(emptyList())
     val images: StateFlow<List<GalleryImage>> = _images.asStateFlow()
 
@@ -22,16 +24,19 @@ class GalleryViewModel(private val repository: ImageRepository) : ViewModel() {
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     fun loadImages(albumId: String? = null) {
+        logger.d { "loadImages called with albumId: $albumId" }
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                _images.value = if (albumId == null) {
+                val result = if (albumId == null) {
                     repository.getImages()
                 } else {
                     repository.getImagesByAlbum(albumId)
                 }
+                logger.d { "Loaded ${result.size} images" }
+                _images.value = result
             } catch (e: Exception) {
-                // Manejar error
+                logger.e(e) { "Error loading images" }
             } finally {
                 _isLoading.value = false
             }

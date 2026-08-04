@@ -11,7 +11,7 @@ androidx-lifecycle = "2.11.0-beta01"
 androidx-nav3 = "1.1.1"
 nav3-browser = "1.1.0"
 kotlinx-serialization = "1.11.0"
-coil = "3.4.0"
+coil = "3.5.0"
 kotlinx-datetime = "0.8.0"
 room = "2.8.4"
 ksp = "2.3.9"
@@ -40,8 +40,10 @@ androidx-lifecycle-viewmodel-navigation3 = { module = "org.jetbrains.androidx.li
 compose-nav3 = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version.ref = "androidx-nav3" }
 nav3-browser = { module = "com.github.terrakok:navigation3-browser", version.ref = "nav3-browser" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
-coil = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
-coil-network-ktor = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
+coilSingleton = { module = "io.coil-kt.coil3:coil", version.ref = "coil" }
+coilCompose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
+coilVideo = { module = "io.coil-kt.coil3:coil-video", version.ref = "coil" }
+coilNetwork = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }

@@ -9,10 +9,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SlowMotionVideo
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
+import com.feraxhp.gallery.model.MediaType
 import com.feraxhp.gallery.repository.ImageRepository
 import com.feraxhp.gallery.viewmodel.GalleryViewModel
 import kotlinx.datetime.Instant
@@ -73,14 +79,38 @@ fun GalleryScreen(repository: ImageRepository, albumId: String? = null) {
                     )
                 }
                 items(imagesInDate, key = { it.id }) { image ->
-                    AsyncImage(
-                        model = image.uri,
-                        contentDescription = image.name,
-                        modifier = Modifier
-                            .aspectRatio(1f)
-                            .fillMaxWidth(),
-                        contentScale = ContentScale.Crop
-                    )
+                    Box {
+                        AsyncImage(
+                            model = image.uri,
+                            contentDescription = image.name,
+                            modifier = Modifier
+                                .aspectRatio(1f)
+                                .fillMaxWidth(),
+                            contentScale = ContentScale.Crop
+                        )
+
+                        if (image.type == MediaType.VIDEO) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "Video",
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(8.dp)
+                                    .size(24.dp),
+                                tint = Color.White
+                            )
+                        } else if (image.isMotionPhoto) {
+                            Icon(
+                                imageVector = Icons.Default.SlowMotionVideo,
+                                contentDescription = "Motion Photo",
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(8.dp)
+                                    .size(20.dp),
+                                tint = Color.White
+                            )
+                        }
+                    }
                 }
             }
         }

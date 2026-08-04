@@ -26,6 +26,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import coil3.ImageLoader
+import coil3.compose.setSingletonImageLoaderFactory
+import coil3.video.VideoFrameDecoder
 import com.feraxhp.gallery.App
 import com.feraxhp.gallery.repository.AndroidImageRepository
 
@@ -34,22 +37,37 @@ class AppActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
+            setSingletonImageLoaderFactory { context ->
+                ImageLoader.Builder(context)
+                    .components {
+                        add(VideoFrameDecoder.Factory())
+                    }
+                    .build()
+            }
+
             val context = LocalContext.current
+            
+            val requiredPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                arrayOf(
+                    Manifest.permission.READ_MEDIA_IMAGES,
+                    Manifest.permission.READ_MEDIA_VIDEO
+                )
+            } else {
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+
             var hasPermission by remember {
-                val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    Manifest.permission.READ_MEDIA_IMAGES
-                } else {
-                    Manifest.permission.READ_EXTERNAL_STORAGE
-                }
                 mutableStateOf(
-                    ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+                    requiredPermissions.all {
+                        ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+                    }
                 )
             }
 
             val launcher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.RequestPermission()
-            ) { isGranted ->
-                hasPermission = isGranted
+                contract = ActivityResultContracts.RequestMultiplePermissions()
+            ) { permissions ->
+                hasPermission = permissions.values.all { it }
             }
 
             val repository = remember { AndroidImageRepository(context) }
@@ -58,12 +76,7 @@ class AppActivity : ComponentActivity() {
                 repository = repository,
                 hasPermission = hasPermission,
                 onRequestPermission = {
-                    val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        Manifest.permission.READ_MEDIA_IMAGES
-                    } else {
-                        Manifest.permission.READ_EXTERNAL_STORAGE
-                    }
-                    launcher.launch(permission)
+                    launcher.launch(requiredPermissions)
                 }
             )
         }

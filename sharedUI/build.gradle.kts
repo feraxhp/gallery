@@ -35,8 +35,8 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodel.navigation3)
             implementation(libs.compose.nav3)
             implementation(libs.kotlinx.serialization.json)
-            implementation(libs.coil)
-            implementation(libs.coil.network.ktor)
+            implementation(libs.coilCompose)
+            implementation(libs.coilNetwork)
             implementation(libs.kotlinx.datetime)
             implementation(libs.room.runtime)
             implementation(libs.ktheme)
@@ -50,6 +50,7 @@ kotlin {
 
         androidMain.dependencies {
             implementation(libs.kotlinx.coroutines.android)
+            implementation(libs.coilVideo)
         }
 
     }

@@ -1,15 +1,14 @@
 package com.feraxhp.gallery.screens
 
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -32,11 +31,18 @@ fun DetailScreen(
         image.uri
     }
 
+    // El fondo se vuelve transparente si el targetState ya no es Visible (gesto iniciado)
+    val isVisible = animatedVisibilityScope.transition.targetState == EnterExitState.Visible
+    val backgroundAlpha by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0f,
+        animationSpec = if (isVisible) tween(300) else tween(0) // Instantáneo al salir
+    )
+
     with(sharedTransitionScope) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black)
+                .background(Color.Black.copy(alpha = backgroundAlpha))
                 .clickable { onBack() }
         ) {
             AsyncImage(

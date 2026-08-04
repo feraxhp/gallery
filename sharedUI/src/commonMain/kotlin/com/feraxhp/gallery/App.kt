@@ -65,13 +65,13 @@ fun App(
     }
 
     val currentDestination = backStack.lastOrNull()
-    val isDetail = currentDestination is Destination.Detail
+    var isDetailActive by remember { mutableStateOf(false) }
 
-    SetSystemBarsColor(isDark = isDetail || isSystemDark)
+    SetSystemBarsColor(isDark = isDetailActive || isSystemDark)
 
-    val appBarContainerColor by animateColorAsState(if (isDetail) Color.Black else MaterialTheme.colorScheme.surface)
-    val appBarContentColor by animateColorAsState(if (isDetail) Color.White else MaterialTheme.colorScheme.onSurface)
-    val scaffoldContainerColor by animateColorAsState(if (isDetail) Color.Black else MaterialTheme.colorScheme.background)
+    val appBarContainerColor by animateColorAsState(if (isDetailActive) Color.Black else MaterialTheme.colorScheme.surface)
+    val appBarContentColor by animateColorAsState(if (isDetailActive) Color.White else MaterialTheme.colorScheme.onSurface)
+    val scaffoldContainerColor by animateColorAsState(if (isDetailActive) Color.Black else MaterialTheme.colorScheme.background)
 
     DynamicTheme {
         Scaffold(
@@ -106,13 +106,13 @@ fun App(
                 )
             },
             bottomBar = {
-                val showBottomBar = hasPermission && (currentDestination == Destination.Gallery || currentDestination == Destination.Albums || isDetail)
+                val showBottomBar = hasPermission && (currentDestination == Destination.Gallery || currentDestination == Destination.Albums || currentDestination is Destination.Detail)
                 if (showBottomBar) {
                     NavigationBar(
-                        containerColor = if (isDetail) Color.Black else MaterialTheme.colorScheme.surface,
-                        contentColor = if (isDetail) Color.White else MaterialTheme.colorScheme.onSurface
+                        containerColor = if (isDetailActive) Color.Black else MaterialTheme.colorScheme.surface,
+                        contentColor = if (isDetailActive) Color.White else MaterialTheme.colorScheme.onSurface
                     ) {
-                        if (!isDetail) {
+                        if (currentDestination !is Destination.Detail) {
                             NavigationBarItem(
                                 selected = currentDestination == Destination.Gallery,
                                 onClick = {
@@ -161,6 +161,7 @@ fun App(
                                     }
                                 }
                             ) {
+                                LaunchedEffect(Unit) { isDetailActive = false }
                                 val animatedVisibilityScope = LocalNavAnimatedContentScope.current
                                 GalleryScreen(
                                     repository = repository,
@@ -172,6 +173,7 @@ fun App(
                                 )
                             }
                             Destination.Albums -> NavEntry(key) {
+                                LaunchedEffect(Unit) { isDetailActive = false }
                                 AlbumsScreen(
                                     repository = repository,
                                     onAlbumClick = { album ->
@@ -187,6 +189,7 @@ fun App(
                                     }
                                 }
                             ) {
+                                LaunchedEffect(Unit) { isDetailActive = false }
                                 val animatedVisibilityScope = LocalNavAnimatedContentScope.current
                                 GalleryScreen(
                                     repository = repository,
@@ -210,6 +213,10 @@ fun App(
                                 }
                             ) {
                                 val animatedVisibilityScope = LocalNavAnimatedContentScope.current
+                                val isTargetVisible = animatedVisibilityScope.transition.targetState == EnterExitState.Visible
+                                LaunchedEffect(isTargetVisible) {
+                                    isDetailActive = isTargetVisible
+                                }
                                 DetailScreen(
                                     image = key.image,
                                     sharedTransitionScope = this@SharedTransitionLayout,

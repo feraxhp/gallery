@@ -1,19 +1,19 @@
 package com.feraxhp.gallery.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SlowMotionVideo
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -21,9 +21,12 @@ import coil3.compose.AsyncImage
 import com.feraxhp.gallery.model.MediaType
 import com.feraxhp.gallery.repository.ImageRepository
 import com.feraxhp.gallery.viewmodel.GalleryViewModel
+import gallery.sharedui.generated.resources.Res
+import gallery.sharedui.generated.resources.ic_cyclone
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import org.jetbrains.compose.resources.painterResource
 
 @Composable
 fun GalleryScreen(repository: ImageRepository, albumId: String? = null) {
@@ -100,15 +103,21 @@ fun GalleryScreen(repository: ImageRepository, albumId: String? = null) {
                                 tint = Color.White
                             )
                         } else if (image.isMotionPhoto) {
-                            Icon(
-                                imageVector = Icons.Default.SlowMotionVideo,
-                                contentDescription = "Motion Photo",
+                            Box(
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
                                     .padding(8.dp)
-                                    .size(20.dp),
-                                tint = Color.White
-                            )
+                                    .size(24.dp)
+                                    .background(Color.Black.copy(alpha = 0.4f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(Res.drawable.ic_cyclone),
+                                    contentDescription = "Motion Photo",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color.White
+                                )
+                            }
                         }
                     }
                 }

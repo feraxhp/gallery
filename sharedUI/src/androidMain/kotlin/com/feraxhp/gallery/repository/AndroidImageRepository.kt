@@ -58,7 +58,8 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
         val projection = mutableListOf(
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.DISPLAY_NAME,
-            MediaStore.MediaColumns.DATE_ADDED
+            MediaStore.MediaColumns.DATE_ADDED,
+            MediaStore.MediaColumns.XMP
         )
 
         if (type == MediaType.VIDEO) {
@@ -87,16 +88,31 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
                 val dateAddedColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
                 val durationColumn = if (type == MediaType.VIDEO) cursor.getColumnIndex(MediaStore.Video.VideoColumns.DURATION) else -1
                 val motionPhotoColumn = if (includeMotionPhoto) cursor.getColumnIndex(isMotionPhotoColumnName) else -1
-
+                
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idColumn)
                     val name = cursor.getString(nameColumn)
                     val dateAdded = cursor.getLong(dateAddedColumn)
                     val duration = if (durationColumn != -1) cursor.getLong(durationColumn) else null
                     val isMotionPhoto = if (motionPhotoColumn != -1) cursor.getInt(motionPhotoColumn) == 1 else false
+                    
+                    // Fallback for Motion Photo detection using XMP or filename
+                    var detectedMotionPhoto = isMotionPhoto
+                    if (!detectedMotionPhoto && type == MediaType.IMAGE) {
+                        val xmpColumn = cursor.getColumnIndex("xmp")
+                        if (xmpColumn != -1) {
+                            val xmpBlob = cursor.getBlob(xmpColumn)
+                            if (xmpBlob != null) {
+                                val xmpString = String(xmpBlob, Charsets.UTF_8)
+                                if (xmpString.contains("MicroVideo") || xmpString.contains("MotionPhoto")) {
+                                    detectedMotionPhoto = true
+                                }
+                            }
+                        }
+                    }
 
                     val contentUri = ContentUris.withAppendedId(uri, id).toString()
-                    list.add(GalleryImage(id, contentUri, name, dateAdded, type, isMotionPhoto, duration))
+                    list.add(GalleryImage(id, contentUri, name, dateAdded, type, detectedMotionPhoto, duration))
                 }
             }
         } catch (e: Exception) {
@@ -119,7 +135,8 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
         val projection = arrayOf(
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.DISPLAY_NAME,
-            MediaStore.MediaColumns.DATE_ADDED
+            MediaStore.MediaColumns.DATE_ADDED,
+            MediaStore.MediaColumns.XMP
         )
         context.contentResolver.query(
             uri,
@@ -131,12 +148,25 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
             val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
             val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
             val dateAddedColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
+            val xmpColumn = cursor.getColumnIndex(MediaStore.MediaColumns.XMP)
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idColumn)
                 val name = cursor.getString(nameColumn)
                 val dateAdded = cursor.getLong(dateAddedColumn)
+                
+                var isMotionPhoto = false
+                if (type == MediaType.IMAGE && xmpColumn != -1) {
+                    val xmpBlob = cursor.getBlob(xmpColumn)
+                    if (xmpBlob != null) {
+                        val xmpString = String(xmpBlob, Charsets.UTF_8)
+                        if (xmpString.contains("MicroVideo") || xmpString.contains("MotionPhoto")) {
+                            isMotionPhoto = true
+                        }
+                    }
+                }
+
                 val contentUri = ContentUris.withAppendedId(uri, id).toString()
-                list.add(GalleryImage(id, contentUri, name, dateAdded, type, false, null))
+                list.add(GalleryImage(id, contentUri, name, dateAdded, type, isMotionPhoto, null))
             }
         }
         return list

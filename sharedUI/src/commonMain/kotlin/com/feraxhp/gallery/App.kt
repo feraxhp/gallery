@@ -14,6 +14,7 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 package com.feraxhp.gallery
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -23,15 +24,22 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.navigation3.runtime.NavEntry
+import androidx.navigation3.runtime.metadata
+import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import androidx.navigation3.ui.NavDisplay
 import com.feraxhp.gallery.navigation.Destination
 import com.feraxhp.gallery.repository.ImageRepository
 import com.feraxhp.gallery.screens.AlbumsScreen
+import com.feraxhp.gallery.screens.DetailScreen
 import com.feraxhp.gallery.screens.GalleryScreen
 import com.feraxhp.gallery.screens.PermissionsScreen
 import com.feraxhp.ktheme.DynamicTheme
 
-@OptIn(ExperimentalMaterial3Api::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    ExperimentalSharedTransitionApi::class
+)
 @Composable
 fun App(
     repository: ImageRepository,
@@ -62,6 +70,7 @@ fun App(
                     Destination.Gallery -> "Fotos"
                     Destination.Albums -> "Álbumes"
                     is Destination.AlbumGallery -> currentDestination.albumName
+                    is Destination.Detail -> "Detalle"
                     null -> ""
                 }
                 TopAppBar(
@@ -105,39 +114,89 @@ fun App(
                 }
             }
         ) { padding ->
-            NavDisplay(
-                modifier = Modifier.padding(padding),
-                backStack = backStack,
-                onBack = {
-                    if (backStack.size > 1) {
-                        backStack = backStack.dropLast(1)
-                    }
-                },
-                entryProvider = { key: Destination ->
-                    when (key) {
-                        Destination.Permissions -> NavEntry(key) {
-                            PermissionsScreen(onRequestPermission = onRequestPermission)
+            SharedTransitionLayout {
+                NavDisplay(
+                    modifier = Modifier.padding(padding),
+                    backStack = backStack,
+                    sharedTransitionScope = this,
+                    onBack = {
+                        if (backStack.size > 1) {
+                            backStack = backStack.dropLast(1)
                         }
-                        Destination.Gallery -> NavEntry(key) {
-                            GalleryScreen(repository = repository)
-                        }
-                        Destination.Albums -> NavEntry(key) {
-                            AlbumsScreen(
-                                repository = repository,
-                                onAlbumClick = { album ->
-                                    backStack = backStack + Destination.AlbumGallery(album.id, album.name)
+                    },
+                    entryProvider = { key: Destination ->
+                        when (key) {
+                            Destination.Permissions -> NavEntry(key) {
+                                PermissionsScreen(onRequestPermission = onRequestPermission)
+                            }
+                            Destination.Gallery -> NavEntry(
+                                key,
+                                metadata = metadata {
+                                    put(NavDisplay.TransitionKey) {
+                                        fadeIn() togetherWith fadeOut() + ExitTransition.KeepUntilTransitionsFinished
+                                    }
                                 }
-                            )
-                        }
-                        is Destination.AlbumGallery -> NavEntry(key) {
-                            GalleryScreen(
-                                repository = repository,
-                                albumId = key.albumId
-                            )
+                            ) {
+                                val animatedVisibilityScope = LocalNavAnimatedContentScope.current
+                                GalleryScreen(
+                                    repository = repository,
+                                    onImageClick = { image ->
+                                        backStack = backStack + Destination.Detail(image)
+                                    },
+                                    sharedTransitionScope = this@SharedTransitionLayout,
+                                    animatedVisibilityScope = animatedVisibilityScope
+                                )
+                            }
+                            Destination.Albums -> NavEntry(key) {
+                                AlbumsScreen(
+                                    repository = repository,
+                                    onAlbumClick = { album ->
+                                        backStack = backStack + Destination.AlbumGallery(album.id, album.name)
+                                    }
+                                )
+                            }
+                            is Destination.AlbumGallery -> NavEntry(
+                                key,
+                                metadata = metadata {
+                                    put(NavDisplay.TransitionKey) {
+                                        fadeIn() togetherWith fadeOut() + ExitTransition.KeepUntilTransitionsFinished
+                                    }
+                                }
+                            ) {
+                                val animatedVisibilityScope = LocalNavAnimatedContentScope.current
+                                GalleryScreen(
+                                    repository = repository,
+                                    albumId = key.albumId,
+                                    onImageClick = { image ->
+                                        backStack = backStack + Destination.Detail(image)
+                                    },
+                                    sharedTransitionScope = this@SharedTransitionLayout,
+                                    animatedVisibilityScope = animatedVisibilityScope
+                                )
+                            }
+                            is Destination.Detail -> NavEntry(
+                                key,
+                                metadata = metadata {
+                                    put(NavDisplay.TransitionKey) {
+                                        fadeIn() togetherWith fadeOut() + ExitTransition.KeepUntilTransitionsFinished
+                                    }
+                                    put(NavDisplay.PopTransitionKey) {
+                                        fadeIn() togetherWith fadeOut() + ExitTransition.KeepUntilTransitionsFinished
+                                    }
+                                }
+                            ) {
+                                val animatedVisibilityScope = LocalNavAnimatedContentScope.current
+                                DetailScreen(
+                                    image = key.image,
+                                    sharedTransitionScope = this@SharedTransitionLayout,
+                                    animatedVisibilityScope = animatedVisibilityScope,
+                                    onBack = { backStack = backStack.dropLast(1) }
+                                )
+                            }
                         }
                     }
-                }
-            )
+                )
+            }
         }
     }
 }

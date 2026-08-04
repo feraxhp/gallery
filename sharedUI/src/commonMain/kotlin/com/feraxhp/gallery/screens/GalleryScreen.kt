@@ -1,6 +1,10 @@
 package com.feraxhp.gallery.screens
 
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -19,6 +23,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
+import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.model.MediaType
 import com.feraxhp.gallery.repository.ImageRepository
 import com.feraxhp.gallery.util.rememberVideoModel
@@ -30,8 +35,15 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.painterResource
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun GalleryScreen(repository: ImageRepository, albumId: String? = null) {
+fun GalleryScreen(
+    repository: ImageRepository,
+    albumId: String? = null,
+    onImageClick: (GalleryImage) -> Unit,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope
+) {
     val viewModel: GalleryViewModel = viewModel { GalleryViewModel(repository) }
     val images by viewModel.images.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -89,42 +101,53 @@ fun GalleryScreen(repository: ImageRepository, albumId: String? = null) {
                     } else {
                         image.uri
                     }
-                    Box {
-                        AsyncImage(
-                            model = model,
-                            contentDescription = image.name,
+                    with(sharedTransitionScope) {
+                        Box(
                             modifier = Modifier
                                 .aspectRatio(1f)
                                 .fillMaxWidth()
-                                .clip(MaterialTheme.shapes.medium),
-                            contentScale = ContentScale.Crop
-                        )
-
-                        if (image.type == MediaType.VIDEO) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "Video",
+                                .clip(MaterialTheme.shapes.medium)
+                                .clickable { onImageClick(image) }
+                        ) {
+                            AsyncImage(
+                                model = model,
+                                contentDescription = image.name,
                                 modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .padding(8.dp)
-                                    .size(24.dp),
-                                tint = Color.White
+                                    .fillMaxSize()
+                                    .sharedBounds(
+                                        sharedContentState = rememberSharedContentState(key = "image-${image.id}"),
+                                        animatedVisibilityScope = animatedVisibilityScope,
+                                        resizeMode = SharedTransitionScope.ResizeMode.scaleToBounds()
+                                    ),
+                                contentScale = ContentScale.Crop
                             )
-                        } else if (image.isMotionPhoto) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(8.dp)
-                                    .size(24.dp)
-                                    .background(Color.Black.copy(alpha = 0.4f), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
+
+                            if (image.type == MediaType.VIDEO) {
                                 Icon(
-                                    painter = painterResource(Res.drawable.ic_cyclone),
-                                    contentDescription = "Motion Photo",
-                                    modifier = Modifier.size(16.dp),
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Video",
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .padding(8.dp)
+                                        .size(24.dp),
                                     tint = Color.White
                                 )
+                            } else if (image.isMotionPhoto) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(8.dp)
+                                        .size(24.dp)
+                                        .background(Color.Black.copy(alpha = 0.4f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        painter = painterResource(Res.drawable.ic_cyclone),
+                                        contentDescription = "Motion Photo",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = Color.White
+                                    )
+                                }
                             }
                         }
                     }

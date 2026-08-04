@@ -1,10 +1,12 @@
 package com.feraxhp.gallery.screens
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
@@ -19,6 +21,7 @@ import coil3.compose.AsyncImage
 import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.model.MediaType
 import com.feraxhp.gallery.util.rememberVideoModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -36,13 +39,18 @@ fun DetailScreen(
 
     // El fondo se vuelve transparente si el targetState ya no es Visible (gesto iniciado)
     val isVisible = animatedVisibilityScope.transition.targetState == EnterExitState.Visible
-    val backgroundAlpha by animateFloatAsState(
+    val baseAlpha by animateFloatAsState(
         targetValue = if (isVisible) 1f else 0f,
         animationSpec = if (isVisible) tween(300) else tween(0) // Instantáneo al salir
     )
 
     var scale by remember { mutableStateOf(1f) }
-    var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    val offsetX = remember { Animatable(0f) }
+    val offsetY = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+
+    // El alpha también depende de cuánto hayamos deslizado hacia abajo
+    val backgroundAlpha = (baseAlpha * (1f - (offsetY.value / 600f).coerceIn(0f, 1f)))
 
     with(sharedTransitionScope) {
         Box(
@@ -66,30 +74,62 @@ fun DetailScreen(
                     .pointerInput(Unit) {
                         detectTapGestures(
                             onDoubleTap = {
-                                if (scale > 1f) {
-                                    scale = 1f
-                                    offset = androidx.compose.ui.geometry.Offset.Zero
-                                } else {
-                                    scale = 3f
+                                scope.launch {
+                                    if (scale > 1f) {
+                                        scale = 1f
+                                        offsetX.snapTo(0f)
+                                        offsetY.snapTo(0f)
+                                    } else {
+                                        scale = 3f
+                                    }
                                 }
                             }
                         )
                     }
                     .pointerInput(Unit) {
                         detectTransformGestures { _, pan, zoom, _ ->
+                            val oldScale = scale
                             scale = (scale * zoom).coerceIn(1f, 5f)
-                            if (scale > 1f) {
-                                offset += pan
-                            } else {
-                                offset = androidx.compose.ui.geometry.Offset.Zero
+
+                            scope.launch {
+                                if (scale > 1f || zoom != 1f) {
+                                    // Si hay zoom o estamos haciendo el gesto de zoom, movemos la imagen libremente
+                                    offsetX.snapTo(offsetX.value + pan.x)
+                                    offsetY.snapTo(offsetY.value + pan.y)
+                                } else if (scale == 1f && pan.y != 0f) {
+                                    // Gesto de deslizar hacia abajo para cerrar (solo si scale es 1 y es un pan vertical)
+                                    val newY = (offsetY.value + pan.y).coerceAtLeast(0f)
+                                    offsetY.snapTo(newY)
+                                }
+                            }
+                        }
+                    }
+                    .pointerInput(Unit) {
+                        // Detectamos cuando el usuario suelta la pantalla para decidir si cerrar o resetear
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                if (event.changes.all { !it.pressed }) {
+                                    // Todos los dedos levantados
+                                    if (scale == 1f) {
+                                        if (offsetY.value > 200f) {
+                                            onBack()
+                                        } else {
+                                            scope.launch {
+                                                offsetY.animateTo(0f)
+                                                offsetX.animateTo(0f)
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                     .graphicsLayer(
                         scaleX = scale,
                         scaleY = scale,
-                        translationX = offset.x,
-                        translationY = offset.y
+                        translationX = offsetX.value,
+                        translationY = offsetY.value
                     ),
                 contentScale = ContentScale.Fit
             )

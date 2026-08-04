@@ -21,11 +21,15 @@ class GalleryViewModel(private val repository: ImageRepository) : ViewModel() {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    fun loadImages() {
+    fun loadImages(albumId: String? = null) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                _images.value = repository.getImages()
+                _images.value = if (albumId == null) {
+                    repository.getImages()
+                } else {
+                    repository.getImagesByAlbum(albumId)
+                }
             } catch (e: Exception) {
                 // Manejar error
             } finally {

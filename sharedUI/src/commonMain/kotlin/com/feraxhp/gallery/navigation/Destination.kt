@@ -10,4 +10,6 @@ sealed interface Destination {
     data object Gallery : Destination
     @Serializable
     data object Albums : Destination
+    @Serializable
+    data class AlbumGallery(val albumId: String, val albumName: String) : Destination
 }

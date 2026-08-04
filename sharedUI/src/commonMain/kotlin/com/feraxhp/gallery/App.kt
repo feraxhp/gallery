@@ -16,6 +16,7 @@ package com.feraxhp.gallery
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.*
@@ -30,7 +31,7 @@ import com.feraxhp.gallery.screens.GalleryScreen
 import com.feraxhp.gallery.screens.PermissionsScreen
 import com.feraxhp.ktheme.DynamicTheme
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun App(
     repository: ImageRepository,
@@ -60,9 +61,22 @@ fun App(
                     Destination.Permissions -> "Permisos"
                     Destination.Gallery -> "Fotos"
                     Destination.Albums -> "Álbumes"
+                    is Destination.AlbumGallery -> currentDestination.albumName
                     null -> ""
                 }
-                TopAppBar(title = { Text(title) })
+                TopAppBar(
+                    title = { Text(title) },
+                    navigationIcon = {
+                        if (backStack.size > 1) {
+                            IconButton(onClick = { backStack = backStack.dropLast(1) }) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Atrás"
+                                )
+                            }
+                        }
+                    }
+                )
             },
             bottomBar = {
                 if (hasPermission && (currentDestination == Destination.Gallery || currentDestination == Destination.Albums)) {
@@ -78,7 +92,7 @@ fun App(
                             label = { Text("Fotos") }
                         )
                         NavigationBarItem(
-                            selected = currentDestination == Destination.Albums,
+                            selected = currentDestination == Destination.Albums || currentDestination is Destination.AlbumGallery,
                             onClick = {
                                 if (currentDestination != Destination.Albums) {
                                     backStack = listOf(Destination.Albums)
@@ -108,7 +122,18 @@ fun App(
                             GalleryScreen(repository = repository)
                         }
                         Destination.Albums -> NavEntry(key) {
-                            AlbumsScreen(repository = repository)
+                            AlbumsScreen(
+                                repository = repository,
+                                onAlbumClick = { album ->
+                                    backStack = backStack + Destination.AlbumGallery(album.id, album.name)
+                                }
+                            )
+                        }
+                        is Destination.AlbumGallery -> NavEntry(key) {
+                            GalleryScreen(
+                                repository = repository,
+                                albumId = key.albumId
+                            )
                         }
                     }
                 }
@@ -122,6 +147,7 @@ fun App(
 fun AppPreview() {
     val mockRepository = object : ImageRepository {
         override suspend fun getImages(): List<com.feraxhp.gallery.model.GalleryImage> = emptyList()
+        override suspend fun getImagesByAlbum(albumId: String): List<com.feraxhp.gallery.model.GalleryImage> = emptyList()
         override suspend fun getAlbums(): List<com.feraxhp.gallery.model.Album> = emptyList()
     }
     App(

@@ -20,7 +20,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
 @Composable
-fun GalleryScreen(repository: ImageRepository) {
+fun GalleryScreen(repository: ImageRepository, albumId: String? = null) {
     val viewModel: GalleryViewModel = viewModel { GalleryViewModel(repository) }
     val images by viewModel.images.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -33,8 +33,8 @@ fun GalleryScreen(repository: ImageRepository) {
         }
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.loadImages()
+    LaunchedEffect(albumId) {
+        viewModel.loadImages(albumId)
     }
 
     if (isLoading && images.isEmpty()) {

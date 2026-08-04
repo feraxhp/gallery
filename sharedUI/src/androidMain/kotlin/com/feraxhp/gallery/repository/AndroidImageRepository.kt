@@ -9,7 +9,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class AndroidImageRepository(private val context: Context) : ImageRepository {
-    override suspend fun getImages(): List<GalleryImage> = withContext(Dispatchers.IO) {
+    override suspend fun getImages(): List<GalleryImage> = getImagesInternal(null, null)
+
+    override suspend fun getImagesByAlbum(albumId: String): List<GalleryImage> =
+        getImagesInternal(
+            "${MediaStore.Images.Media.BUCKET_ID} = ?",
+            arrayOf(albumId)
+        )
+
+    private suspend fun getImagesInternal(
+        selection: String?,
+        selectionArgs: Array<String>?
+    ): List<GalleryImage> = withContext(Dispatchers.IO) {
         val images = mutableListOf<GalleryImage>()
         val projection = arrayOf(
             MediaStore.Images.Media._ID,
@@ -20,8 +31,8 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
         val query = context.contentResolver.query(
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
             projection,
-            null,
-            null,
+            selection,
+            selectionArgs,
             "${MediaStore.Images.Media.DATE_ADDED} DESC"
         )
 

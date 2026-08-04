@@ -1,5 +1,6 @@
 package com.feraxhp.gallery.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -14,11 +15,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
+import com.feraxhp.gallery.model.Album
 import com.feraxhp.gallery.repository.ImageRepository
 import com.feraxhp.gallery.viewmodel.GalleryViewModel
 
 @Composable
-fun AlbumsScreen(repository: ImageRepository) {
+fun AlbumsScreen(
+    repository: ImageRepository,
+    onAlbumClick: (Album) -> Unit
+) {
     val viewModel: GalleryViewModel = viewModel { GalleryViewModel(repository) }
     val albums by viewModel.albums.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -40,7 +45,9 @@ fun AlbumsScreen(repository: ImageRepository) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             items(albums, key = { it.id }) { album ->
-                Column {
+                Column(
+                    modifier = Modifier.clickable { onAlbumClick(album) }
+                ) {
                     AsyncImage(
                         model = album.coverUri,
                         contentDescription = album.name,

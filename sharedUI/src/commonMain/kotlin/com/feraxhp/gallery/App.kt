@@ -15,6 +15,7 @@
 package com.feraxhp.gallery
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -34,6 +35,7 @@ import com.feraxhp.gallery.screens.AlbumsScreen
 import com.feraxhp.gallery.screens.DetailScreen
 import com.feraxhp.gallery.screens.GalleryScreen
 import com.feraxhp.gallery.screens.PermissionsScreen
+import com.feraxhp.gallery.util.SetSystemBarsColor
 import com.feraxhp.ktheme.DynamicTheme
 
 @OptIn(
@@ -47,6 +49,7 @@ fun App(
     hasPermission: Boolean,
     onRequestPermission: () -> Unit
 ) {
+    val isSystemDark = isSystemInDarkTheme()
     var backStack by remember {
         mutableStateOf(
             listOf<Destination>(
@@ -63,6 +66,8 @@ fun App(
 
     val currentDestination = backStack.lastOrNull()
     val isDetail = currentDestination is Destination.Detail
+
+    SetSystemBarsColor(isDark = isDetail || isSystemDark)
 
     val appBarContainerColor by animateColorAsState(if (isDetail) Color.Black else MaterialTheme.colorScheme.surface)
     val appBarContentColor by animateColorAsState(if (isDetail) Color.White else MaterialTheme.colorScheme.onSurface)

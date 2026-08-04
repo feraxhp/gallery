@@ -15,6 +15,7 @@
 package com.feraxhp.gallery
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -95,7 +96,11 @@ fun App(
                     ),
                     navigationIcon = {
                         if (backStack.size > 1) {
-                            IconButton(onClick = { backStack = backStack.dropLast(1) }) {
+                            IconButton(onClick = {
+                                if (backStack.size > 1) {
+                                    backStack = backStack.dropLast(1)
+                                }
+                            }) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                     contentDescription = "Atrás"
@@ -157,7 +162,7 @@ fun App(
                                 key,
                                 metadata = metadata {
                                     put(NavDisplay.TransitionKey) {
-                                        fadeIn() togetherWith fadeOut() + ExitTransition.KeepUntilTransitionsFinished
+                                        fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
                                     }
                                 }
                             ) {
@@ -185,7 +190,7 @@ fun App(
                                 key,
                                 metadata = metadata {
                                     put(NavDisplay.TransitionKey) {
-                                        fadeIn() togetherWith fadeOut() + ExitTransition.KeepUntilTransitionsFinished
+                                        fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
                                     }
                                 }
                             ) {
@@ -205,10 +210,10 @@ fun App(
                                 key,
                                 metadata = metadata {
                                     put(NavDisplay.TransitionKey) {
-                                        fadeIn() togetherWith fadeOut() + ExitTransition.KeepUntilTransitionsFinished
+                                        fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
                                     }
                                     put(NavDisplay.PopTransitionKey) {
-                                        fadeIn() togetherWith fadeOut() + ExitTransition.KeepUntilTransitionsFinished
+                                        fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
                                     }
                                 }
                             ) {
@@ -221,7 +226,11 @@ fun App(
                                     image = key.image,
                                     sharedTransitionScope = this@SharedTransitionLayout,
                                     animatedVisibilityScope = animatedVisibilityScope,
-                                    onBack = { backStack = backStack.dropLast(1) }
+                                    onBack = {
+                                        if (backStack.size > 1) {
+                                            backStack = backStack.dropLast(1)
+                                        }
+                                    }
                                 )
                             }
                         }

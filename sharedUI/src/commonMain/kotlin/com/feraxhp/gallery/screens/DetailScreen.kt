@@ -1,21 +1,21 @@
 package com.feraxhp.gallery.screens
 
 import androidx.compose.animation.*
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -42,6 +42,14 @@ fun DetailScreen(
         image.uri
     }
 
+    var backCalled by remember { mutableStateOf(false) }
+    val safeOnBack = {
+        if (!backCalled) {
+            backCalled = true
+            onBack()
+        }
+    }
+
     // El fondo se vuelve transparente si el targetState ya no es Visible (gesto iniciado)
     val isVisible = animatedVisibilityScope.transition.targetState == EnterExitState.Visible
     val baseAlpha by animateFloatAsState(
@@ -57,6 +65,11 @@ fun DetailScreen(
     // El alpha también depende de cuánto hayamos deslizado hacia abajo
     val backgroundAlpha = (baseAlpha * (1f - (offsetY.value / 600f).coerceIn(0f, 1f)))
 
+    val cornerRadius by animateDpAsState(
+        targetValue = if (isVisible) 0.dp else 12.dp,
+        label = "cornerRadius"
+    )
+
     val isCentered by remember {
         derivedStateOf { scale == 1f && offsetX.value == 0f && offsetY.value == 0f }
     }
@@ -71,25 +84,43 @@ fun DetailScreen(
         }
     }
 
+    val showAspectRatio by remember {
+        derivedStateOf {
+            val isTransitionActive = animatedVisibilityScope.transition.currentState != animatedVisibilityScope.transition.targetState
+            isTransitionActive || scale == 1f
+        }
+    }
+
     with(sharedTransitionScope) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = backgroundAlpha))
-                .clickable(enabled = scale == 1f) { onBack() }
+                .clickable(enabled = scale == 1f && isVisible) { safeOnBack() },
+            contentAlignment = Alignment.Center
         ) {
             AsyncImage(
                 model = model,
                 contentDescription = image.name,
                 modifier = Modifier
                     .fillMaxSize()
+                    .then(
+                        if (showAspectRatio) {
+                            Modifier
+                                .wrapContentSize(Alignment.Center)
+                                .aspectRatio(image.aspectRatio)
+                        } else {
+                            Modifier
+                        }
+                    )
                     .sharedBounds(
                         sharedContentState = rememberSharedContentState(key = "image-${image.id}"),
                         animatedVisibilityScope = animatedVisibilityScope,
-                        enter = fadeIn(),
-                        exit = fadeOut(),
-                        resizeMode = SharedTransitionScope.ResizeMode.scaleToBounds()
+                        boundsTransform = { _, _ -> tween(500) },
+                        resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
+                        clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(cornerRadius))
                     )
+                    .clip(RoundedCornerShape(cornerRadius))
                     .pointerInput(Unit) {
                         detectTapGestures(
                             onDoubleTap = {
@@ -111,11 +142,9 @@ fun DetailScreen(
 
                             scope.launch {
                                 if (scale > 1f || zoom != 1f) {
-                                    // Si hay zoom o estamos haciendo el gesto de zoom, movemos la imagen libremente
                                     offsetX.snapTo(offsetX.value + pan.x)
                                     offsetY.snapTo(offsetY.value + pan.y)
                                 } else if (scale == 1f && pan.y != 0f) {
-                                    // Gesto de deslizar hacia abajo para cerrar (solo si scale es 1 y es un pan vertical)
                                     val newY = (offsetY.value + pan.y).coerceAtLeast(0f)
                                     offsetY.snapTo(newY)
                                 }
@@ -123,15 +152,13 @@ fun DetailScreen(
                         }
                     }
                     .pointerInput(Unit) {
-                        // Detectamos cuando el usuario suelta la pantalla para decidir si cerrar o resetear
                         awaitPointerEventScope {
                             while (true) {
                                 val event = awaitPointerEvent()
                                 if (event.changes.all { !it.pressed }) {
-                                    // Todos los dedos levantados
                                     if (scale == 1f) {
                                         if (offsetY.value > 200f) {
-                                            onBack()
+                                            safeOnBack()
                                         } else {
                                             scope.launch {
                                                 offsetY.animateTo(0f)
@@ -149,7 +176,7 @@ fun DetailScreen(
                         translationX = offsetX.value,
                         translationY = offsetY.value
                     ),
-                contentScale = ContentScale.Fit
+                contentScale = if (showAspectRatio) ContentScale.Crop else ContentScale.Fit
             )
 
             AnimatedVisibility(

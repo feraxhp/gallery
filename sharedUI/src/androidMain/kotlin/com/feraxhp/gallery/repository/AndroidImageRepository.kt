@@ -59,6 +59,9 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.DISPLAY_NAME,
             MediaStore.MediaColumns.DATE_ADDED,
+            MediaStore.MediaColumns.WIDTH,
+            MediaStore.MediaColumns.HEIGHT,
+            MediaStore.MediaColumns.ORIENTATION,
             MediaStore.MediaColumns.XMP
         )
 
@@ -86,6 +89,9 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
                 val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
                 val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
                 val dateAddedColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
+                val widthColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.WIDTH)
+                val heightColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.HEIGHT)
+                val orientationColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.ORIENTATION)
                 val durationColumn = if (type == MediaType.VIDEO) cursor.getColumnIndex(MediaStore.Video.VideoColumns.DURATION) else -1
                 val motionPhotoColumn = if (includeMotionPhoto) cursor.getColumnIndex(isMotionPhotoColumnName) else -1
                 
@@ -93,6 +99,14 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
                     val id = cursor.getLong(idColumn)
                     val name = cursor.getString(nameColumn)
                     val dateAdded = cursor.getLong(dateAddedColumn)
+                    val orientation = cursor.getInt(orientationColumn)
+                    
+                    val rawWidth = cursor.getInt(widthColumn)
+                    val rawHeight = cursor.getInt(heightColumn)
+                    
+                    val width = if (orientation == 90 || orientation == 270) rawHeight else rawWidth
+                    val height = if (orientation == 90 || orientation == 270) rawWidth else rawHeight
+                    
                     val duration = if (durationColumn != -1) cursor.getLong(durationColumn) else null
                     val isMotionPhoto = if (motionPhotoColumn != -1) cursor.getInt(motionPhotoColumn) == 1 else false
                     
@@ -112,7 +126,7 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
                     }
 
                     val contentUri = ContentUris.withAppendedId(uri, id).toString()
-                    list.add(GalleryImage(id, contentUri, name, dateAdded, type, detectedMotionPhoto, duration))
+                    list.add(GalleryImage(id, contentUri, name, dateAdded, type, detectedMotionPhoto, duration, width, height))
                 }
             }
         } catch (e: Exception) {
@@ -136,6 +150,9 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.DISPLAY_NAME,
             MediaStore.MediaColumns.DATE_ADDED,
+            MediaStore.MediaColumns.WIDTH,
+            MediaStore.MediaColumns.HEIGHT,
+            MediaStore.MediaColumns.ORIENTATION,
             MediaStore.MediaColumns.XMP
         )
         context.contentResolver.query(
@@ -148,11 +165,20 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
             val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
             val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
             val dateAddedColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
+            val widthColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.WIDTH)
+            val heightColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.HEIGHT)
+            val orientationColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.ORIENTATION)
             val xmpColumn = cursor.getColumnIndex(MediaStore.MediaColumns.XMP)
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idColumn)
                 val name = cursor.getString(nameColumn)
                 val dateAdded = cursor.getLong(dateAddedColumn)
+                val orientation = cursor.getInt(orientationColumn)
+                val rawWidth = cursor.getInt(widthColumn)
+                val rawHeight = cursor.getInt(heightColumn)
+
+                val width = if (orientation == 90 || orientation == 270) rawHeight else rawWidth
+                val height = if (orientation == 90 || orientation == 270) rawWidth else rawHeight
                 
                 var isMotionPhoto = false
                 if (type == MediaType.IMAGE && xmpColumn != -1) {
@@ -166,7 +192,7 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
                 }
 
                 val contentUri = ContentUris.withAppendedId(uri, id).toString()
-                list.add(GalleryImage(id, contentUri, name, dateAdded, type, isMotionPhoto, null))
+                list.add(GalleryImage(id, contentUri, name, dateAdded, type, isMotionPhoto, null, width, height))
             }
         }
         return list

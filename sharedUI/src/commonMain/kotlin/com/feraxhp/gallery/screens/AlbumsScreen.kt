@@ -17,6 +17,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.feraxhp.gallery.model.Album
 import com.feraxhp.gallery.repository.ImageRepository
+import com.feraxhp.gallery.util.rememberVideoModel
 import com.feraxhp.gallery.viewmodel.GalleryViewModel
 
 @Composable
@@ -48,8 +49,13 @@ fun AlbumsScreen(
                 Column(
                     modifier = Modifier.clickable { onAlbumClick(album) }
                 ) {
+                    val model = if (album.coverUri.contains("video", ignoreCase = true)) {
+                        rememberVideoModel(album.coverUri, null)
+                    } else {
+                        album.coverUri
+                    }
                     AsyncImage(
-                        model = album.coverUri,
+                        model = model,
                         contentDescription = album.name,
                         modifier = Modifier
                             .aspectRatio(1f)

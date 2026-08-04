@@ -21,6 +21,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.feraxhp.gallery.model.MediaType
 import com.feraxhp.gallery.repository.ImageRepository
+import com.feraxhp.gallery.util.rememberVideoModel
 import com.feraxhp.gallery.viewmodel.GalleryViewModel
 import gallery.sharedui.generated.resources.Res
 import gallery.sharedui.generated.resources.ic_cyclone
@@ -83,9 +84,14 @@ fun GalleryScreen(repository: ImageRepository, albumId: String? = null) {
                     )
                 }
                 items(imagesInDate, key = { it.id }) { image ->
+                    val model = if (image.type == MediaType.VIDEO) {
+                        rememberVideoModel(image.uri, image.duration)
+                    } else {
+                        image.uri
+                    }
                     Box {
                         AsyncImage(
-                            model = image.uri,
+                            model = model,
                             contentDescription = image.name,
                             modifier = Modifier
                                 .aspectRatio(1f)

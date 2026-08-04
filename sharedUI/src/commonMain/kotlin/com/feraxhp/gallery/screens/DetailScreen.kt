@@ -27,6 +27,7 @@ import com.feraxhp.gallery.model.MediaType
 import com.feraxhp.gallery.util.rememberVideoModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -54,10 +55,14 @@ fun DetailScreen(
     val isVisible = animatedVisibilityScope.transition.targetState == EnterExitState.Visible
     val baseAlpha by animateFloatAsState(
         targetValue = if (isVisible) 1f else 0f,
-        animationSpec = if (isVisible) tween(300) else tween(0) // Instantáneo al salir
+        animationSpec = if (isVisible) tween(300) else tween(
+            durationMillis = 0,
+            delayMillis = 0,
+            easing = EaseOutExpo,
+        )
     )
 
-    var scale by remember { mutableStateOf(1f) }
+    var scale by remember { mutableFloatStateOf(1f) }
     val offsetX = remember { Animatable(0f) }
     val offsetY = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
@@ -77,7 +82,7 @@ fun DetailScreen(
 
     LaunchedEffect(isCentered) {
         if (isCentered) {
-            delay(150)
+            delay(150.milliseconds)
             showIndicator = false
         } else {
             showIndicator = true

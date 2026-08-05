@@ -23,6 +23,17 @@ class GalleryViewModel(private val repository: ImageRepository) : ViewModel() {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _deletedImageId = MutableStateFlow<Long?>(null)
+    val deletedImageId: StateFlow<Long?> = _deletedImageId.asStateFlow()
+
+    fun markAsDeleted(imageId: Long) {
+        _deletedImageId.value = imageId
+    }
+
+    fun clearDeletedState() {
+        _deletedImageId.value = null
+    }
+
     fun loadImages(albumId: String? = null) {
         logger.d { "loadImages called with albumId: $albumId" }
         viewModelScope.launch {

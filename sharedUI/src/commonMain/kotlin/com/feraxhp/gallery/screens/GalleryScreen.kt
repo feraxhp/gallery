@@ -19,35 +19,87 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
+import com.feraxhp.gallery.components.ShatterEffect
 import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.model.MediaType
 import com.feraxhp.gallery.repository.ImageRepository
 import com.feraxhp.gallery.util.rememberVideoModel
+import com.feraxhp.gallery.util.toImageBitmap
 import com.feraxhp.gallery.viewmodel.GalleryViewModel
 import gallery.sharedui.generated.resources.Res
 import gallery.sharedui.generated.resources.ic_cyclone
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.painterResource
 
+private data class ShatterData(
+    val bitmap: ImageBitmap,
+    val offset: IntOffset,
+    val size: androidx.compose.ui.unit.IntSize
+)
+
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun GalleryScreen(
-    repository: ImageRepository,
+    viewModel: GalleryViewModel,
     albumId: String? = null,
     onImageClick: (GalleryImage, List<GalleryImage>) -> Unit,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
-    val viewModel: GalleryViewModel = viewModel { GalleryViewModel(repository) }
     val images by viewModel.images.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val deletedImageId by viewModel.deletedImageId.collectAsState()
+    
+    // Offset de la propia galería respecto al root para corregir el posicionamiento de la animación
+    var galleryOffset by remember { mutableStateOf(Offset.Zero) }
+
+    // Para rastrear posiciones y bitmaps de las imágenes
+    val imageBounds = remember { mutableStateMapOf<Long, androidx.compose.ui.geometry.Rect>() }
+    val imageBitmaps = remember { mutableStateMapOf<Long, ImageBitmap>() }
+    
+    // Estado para la animación activa
+    var activeShatterEffect by remember { mutableStateOf<ShatterData?>(null) }
+    
+    LaunchedEffect(deletedImageId) {
+        val id = deletedImageId
+        if (id != null) {
+            val bounds = imageBounds[id]
+            val bitmap = imageBitmaps[id]
+            
+            if (bounds != null && bitmap != null) {
+                // Esperar a que la transición sea visible (comienza antes de que termine del todo)
+                snapshotFlow { animatedVisibilityScope.transition.targetState == EnterExitState.Visible }
+                    .filter { it }
+                    .first()
+                
+                delay(390) // Retraso de 50ms para sincronizar mejor
+                
+                activeShatterEffect = ShatterData(
+                    bitmap = bitmap,
+                    offset = IntOffset(bounds.left.toInt(), bounds.top.toInt()),
+                    size = androidx.compose.ui.unit.IntSize(bounds.width.toInt(), bounds.height.toInt())
+                )
+            }
+            // Limpiamos el estado en el ViewModel para que no se repita
+            viewModel.clearDeletedState()
+        }
+    }
 
     val isTransitionRunning = animatedVisibilityScope.transition.currentState != animatedVisibilityScope.transition.targetState
     val isTargetVisible = animatedVisibilityScope.transition.targetState == EnterExitState.Visible
@@ -72,13 +124,14 @@ fun GalleryScreen(
     }
 
     if (isLoading && images.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxSize().onGloballyPositioned { galleryOffset = it.positionInRoot() }, contentAlignment = Alignment.Center) {
             LoadingIndicator()
         }
     } else {
         with(sharedTransitionScope) {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
+            Box(Modifier.fillMaxSize().onGloballyPositioned { galleryOffset = it.positionInRoot() }) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(3),
                 modifier = Modifier
                     .fillMaxSize()
                     .then(
@@ -114,7 +167,9 @@ fun GalleryScreen(
                         }
                         Text(
                             text = "${date.day} de $monthName de ${date.year}",
-                            modifier = Modifier.padding(vertical = 12.dp, horizontal = 8.dp),
+                            modifier = Modifier
+                                .animateItem()
+                                .padding(vertical = 12.dp, horizontal = 8.dp),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -128,13 +183,28 @@ fun GalleryScreen(
                         with(sharedTransitionScope) {
                             Box(
                                 modifier = Modifier
+                                    .animateItem()
                                     .aspectRatio(1f)
                                     .fillMaxWidth()
+                                    .onGloballyPositioned {
+                                        val rootPos = it.positionInRoot()
+                                        imageBounds[image.id] = androidx.compose.ui.geometry.Rect(
+                                            offset = Offset(rootPos.x - galleryOffset.x, rootPos.y - galleryOffset.y),
+                                            size = androidx.compose.ui.geometry.Size(it.size.width.toFloat(), it.size.height.toFloat())
+                                        )
+                                    }
                                     .clip(MaterialTheme.shapes.medium)
                                     .clickable { onImageClick(image, images) }
                             ) {
                                 AsyncImage(
                                     model = model,
+                                    onState = { state ->
+                                        if (state is AsyncImagePainter.State.Success) {
+                                            state.result.image.toImageBitmap()?.let {
+                                                imageBitmaps[image.id] = it
+                                            }
+                                        }
+                                    },
                                     contentDescription = image.name,
                                     modifier = Modifier
                                         .fillMaxSize()
@@ -184,6 +254,29 @@ fun GalleryScreen(
                     }
                 }
             }
+                
+            // El ShatterEffect se dibuja encima de todo en un Box de pantalla completa
+            Box(Modifier.fillMaxSize()) {
+                activeShatterEffect?.let { data ->
+                    val density = androidx.compose.ui.platform.LocalDensity.current
+                    ShatterEffect(
+                        bitmap = data.bitmap,
+                        modifier = Modifier
+                            .offset(
+                                x = with(density) { data.offset.x.toDp() },
+                                y = with(density) { data.offset.y.toDp() }
+                            )
+                            .size(
+                                width = with(density) { data.size.width.toDp() },
+                                height = with(density) { data.size.height.toDp() }
+                            ),
+                        onAnimationEnd = {
+                            activeShatterEffect = null
+                        }
+                    )
+                }
+            }
         }
     }
+}
 }

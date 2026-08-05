@@ -73,6 +73,8 @@ import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.metadata
 import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import androidx.navigation3.ui.NavDisplay
+import androidx.lifecycle.viewmodel.compose.viewModel
+import co.touchlab.kermit.Logger
 import com.feraxhp.gallery.components.NavigationItem
 import com.feraxhp.gallery.navigation.Destination
 import com.feraxhp.gallery.repository.ImageRepository
@@ -82,6 +84,7 @@ import com.feraxhp.gallery.screens.GalleryScreen
 import com.feraxhp.gallery.screens.MoveToAlbumScreen
 import com.feraxhp.gallery.screens.PermissionsScreen
 import com.feraxhp.gallery.util.SetSystemBarsColor
+import com.feraxhp.gallery.viewmodel.GalleryViewModel
 import com.feraxhp.ktheme.DynamicTheme
 import kotlinx.coroutines.launch
 
@@ -99,6 +102,7 @@ fun App(
     onRequestWritePermission: () -> Unit
 ) {
     val isSystemDark = isSystemInDarkTheme()
+    val galleryViewModel: GalleryViewModel = viewModel { GalleryViewModel(repository) }
     var backStack by remember {
         mutableStateOf(
             listOf<Destination>(
@@ -138,6 +142,7 @@ fun App(
                 TextButton(onClick = {
                     val imageToDelete = currentImageInDetail!!
                     scope.launch {
+                        galleryViewModel.markAsDeleted(imageToDelete.id)
                         repository.deleteImage(imageToDelete)
                         showDeleteConfirmation = false
                         // Si borramos, volvemos atrás
@@ -327,7 +332,7 @@ fun App(
                                     val animatedVisibilityScope =
                                         LocalNavAnimatedContentScope.current
                                     GalleryScreen(
-                                        repository = repository,
+                                        viewModel = galleryViewModel,
                                         onImageClick = { image, allImages ->
                                             backStack =
                                                 backStack + Destination.Detail(image, allImages)
@@ -379,7 +384,7 @@ fun App(
                                     val animatedVisibilityScope =
                                         LocalNavAnimatedContentScope.current
                                     GalleryScreen(
-                                        repository = repository,
+                                        viewModel = galleryViewModel,
                                         albumId = key.albumId,
                                         onImageClick = { image, allImages ->
                                             backStack =

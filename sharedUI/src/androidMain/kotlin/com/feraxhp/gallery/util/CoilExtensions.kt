@@ -2,6 +2,10 @@ package com.feraxhp.gallery.util
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import coil3.Image
+import coil3.BitmapImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import coil3.video.videoFrameMillis
@@ -19,4 +23,8 @@ actual fun rememberVideoModel(uri: String, duration: Long?): Any? {
             })
             .build()
     }
+}
+
+actual fun Image.toImageBitmap(): ImageBitmap? {
+    return (this as? BitmapImage)?.bitmap?.asImageBitmap()
 }

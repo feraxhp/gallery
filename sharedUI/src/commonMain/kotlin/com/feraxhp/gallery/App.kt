@@ -290,7 +290,17 @@ fun App(
                         },
                         entryProvider = { key: Destination ->
                             when (key) {
-                                Destination.Permissions -> NavEntry(key) {
+                                Destination.Permissions -> NavEntry(
+                                    key,
+                                    metadata = metadata {
+                                        put(NavDisplay.TransitionKey) {
+                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
+                                        }
+                                        put(NavDisplay.PopTransitionKey) {
+                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
+                                        }
+                                    }
+                                ) {
                                     PermissionsScreen(
                                         hasReadPermission = currentReadPermission,
                                         hasWritePermission = currentWritePermission,
@@ -306,6 +316,9 @@ fun App(
                                     key,
                                     metadata = metadata {
                                         put(NavDisplay.TransitionKey) {
+                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
+                                        }
+                                        put(NavDisplay.PopTransitionKey) {
                                             fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
                                         }
                                     }
@@ -324,7 +337,17 @@ fun App(
                                     )
                                 }
 
-                                Destination.Albums -> NavEntry(key) {
+                                Destination.Albums -> NavEntry(
+                                    key,
+                                    metadata = metadata {
+                                        put(NavDisplay.TransitionKey) {
+                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
+                                        }
+                                        put(NavDisplay.PopTransitionKey) {
+                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
+                                        }
+                                    }
+                                ) {
                                     LaunchedEffect(Unit) { isDetailActive = false }
                                     val animatedVisibilityScope =
                                         LocalNavAnimatedContentScope.current
@@ -344,6 +367,9 @@ fun App(
                                     key,
                                     metadata = metadata {
                                         put(NavDisplay.TransitionKey) {
+                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
+                                        }
+                                        put(NavDisplay.PopTransitionKey) {
                                             fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
                                         }
                                     }
@@ -397,7 +423,17 @@ fun App(
                                     )
                                 }
 
-                                is Destination.MoveToAlbum -> NavEntry(key) {
+                                is Destination.MoveToAlbum -> NavEntry(
+                                    key,
+                                    metadata = metadata {
+                                        put(NavDisplay.TransitionKey) {
+                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
+                                        }
+                                        put(NavDisplay.PopTransitionKey) {
+                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
+                                        }
+                                    }
+                                ) {
                                     MoveToAlbumScreen(
                                         repository = repository,
                                         onAlbumSelected = { album ->

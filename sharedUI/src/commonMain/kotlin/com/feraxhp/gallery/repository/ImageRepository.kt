@@ -12,4 +12,5 @@ interface ImageRepository {
     suspend fun moveImage(image: GalleryImage, albumId: String): GalleryImage?
     suspend fun copyImage(image: GalleryImage): Boolean
     fun openInFileManager(path: String)
+    fun shareImage(image: GalleryImage)
 }

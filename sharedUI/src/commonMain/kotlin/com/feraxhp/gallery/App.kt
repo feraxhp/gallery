@@ -37,10 +37,10 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DriveFileMove
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoAlbum
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -129,7 +129,6 @@ fun App(
     }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val clipboardManager = LocalClipboardManager.current
 
     SetSystemBarsColor(isDark = isDetailActive || isSystemDark)
 
@@ -205,10 +204,10 @@ fun App(
                         if (currentDestination is Destination.Detail && isDetailActive && currentImageInDetail != null) {
                             IconButton(onClick = {
                                 currentImageInDetail?.let {
-                                    clipboardManager.setText(AnnotatedString(it.uri))
+                                    repository.shareImage(it)
                                 }
                             }) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = "Copiar")
+                                Icon(Icons.Default.Share, contentDescription = "Compartir")
                             }
                             IconButton(onClick = {
                                 currentImageInDetail?.let {
@@ -493,6 +492,7 @@ fun AppPreview() {
         override suspend fun moveImage(image: com.feraxhp.gallery.model.GalleryImage, albumId: String): com.feraxhp.gallery.model.GalleryImage? = null
         override suspend fun copyImage(image: com.feraxhp.gallery.model.GalleryImage): Boolean = true
         override fun openInFileManager(path: String) {}
+        override fun shareImage(image: com.feraxhp.gallery.model.GalleryImage) {}
     }
     App(
         repository = mockRepository,

@@ -3,6 +3,7 @@ package com.feraxhp.gallery.repository
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -370,6 +371,18 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
         } catch (e: Exception) {
             Log.e("GalleryRepo", "Error al abrir el gestor de archivos: ${e.message}")
         }
+    }
+
+    override fun shareImage(image: GalleryImage) {
+        val shareIntent = Intent().apply {
+            action = Intent.ACTION_SEND
+            putExtra(Intent.EXTRA_STREAM, Uri.parse(image.uri))
+            type = if (image.type == MediaType.VIDEO) "video/*" else "image/*"
+            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+        }
+        val chooser = Intent.createChooser(shareIntent, "Compartir con")
+        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(chooser)
     }
 
     override suspend fun getImageById(id: Long, type: MediaType): GalleryImage? = withContext(Dispatchers.IO) {

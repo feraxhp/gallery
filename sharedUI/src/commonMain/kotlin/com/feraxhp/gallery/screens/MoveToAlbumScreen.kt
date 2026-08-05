@@ -22,7 +22,8 @@ import com.feraxhp.gallery.viewmodel.GalleryViewModel
 @Composable
 fun MoveToAlbumScreen(
     repository: ImageRepository,
-    onAlbumSelected: (Album) -> Unit
+    onAlbumSelected: (Album) -> Unit,
+    topPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val viewModel: GalleryViewModel = viewModel { GalleryViewModel(repository) }
     val albums by viewModel.albums.collectAsState()
@@ -39,7 +40,12 @@ fun MoveToAlbumScreen(
     } else {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                top = 16.dp + topPadding,
+                end = 16.dp,
+                bottom = 16.dp
+            ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             items(albums, key = { it.id }) { album ->

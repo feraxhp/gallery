@@ -28,7 +28,8 @@ fun AlbumsScreen(
     repository: ImageRepository,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
-    onAlbumClick: (Album) -> Unit
+    onAlbumClick: (Album) -> Unit,
+    topPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val viewModel: GalleryViewModel = viewModel { GalleryViewModel(repository) }
     val albums by viewModel.albums.collectAsState()
@@ -50,7 +51,7 @@ fun AlbumsScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = 16.dp,
-                top = 16.dp,
+                top = 16.dp + topPadding,
                 end = 16.dp,
                 bottom = 100.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             ),

@@ -23,13 +23,15 @@ fun PermissionsScreen(
     hasWritePermission: Boolean,
     onRequestReadPermission: () -> Unit,
     onRequestWritePermission: () -> Unit,
-    onContinue: () -> Unit
+    onContinue: () -> Unit,
+    topPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(24.dp),
+            .padding(24.dp)
+            .padding(top = topPadding),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.height(8.dp))

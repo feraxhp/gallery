@@ -53,7 +53,8 @@ fun DetailScreen(
     animatedVisibilityScope: AnimatedVisibilityScope,
     repository: ImageRepository,
     onImageChange: (GalleryImage) -> Unit = {},
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    topPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val pagerState = rememberPagerState(initialPage = initialIndex) { images.size }
     val scope = rememberCoroutineScope()
@@ -100,7 +101,8 @@ fun DetailScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = backgroundAlpha)),
+                .background(Color.Black.copy(alpha = backgroundAlpha))
+                .padding(top = topPadding),
             contentAlignment = Alignment.Center
         ) {
             HorizontalPager(

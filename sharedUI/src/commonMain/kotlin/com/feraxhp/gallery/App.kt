@@ -180,13 +180,14 @@ fun App(
     }
 
     DynamicTheme {
-        val appBarContainerColor by animateColorAsState(if (isDetailActive) Color.Black else MaterialTheme.colorScheme.surface)
+        val appBarContainerColor by animateColorAsState(
+            if (isDetailActive) Color.Black else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+        )
         val appBarContentColor by animateColorAsState(if (isDetailActive) Color.White else MaterialTheme.colorScheme.onSurface)
         val scaffoldContainerColor by animateColorAsState(if (isDetailActive) Color.Black else MaterialTheme.colorScheme.background)
 
         Scaffold(
             containerColor = scaffoldContainerColor,
-            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
                 val title = when (currentDestination) {
                     Destination.Permissions -> ""
@@ -251,11 +252,28 @@ fun App(
                 )
             }
         ) { padding ->
+            val topPadding = padding.calculateTopPadding()
             Box(
-                Modifier
-                    .fillMaxSize()
-                    .padding(top = padding.calculateTopPadding())
+                Modifier.fillMaxSize()
             ) {
+                if (!isDetailActive) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(topPadding + 20.dp)
+                            .background(
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                                        MaterialTheme.colorScheme.surface.copy(alpha = 0.4f),
+                                        Color.Transparent
+                                    )
+                                )
+                            )
+                            .zIndex(1f)
+                    )
+                }
+
                 val isActuallyInDetail = currentDestination is Destination.Detail && isDetailActive
                 val showBottomBar = hasReadPermission && (
                         currentDestination == Destination.Gallery ||
@@ -389,6 +407,7 @@ fun App(
                                         hasWritePermission = currentWritePermission,
                                         onRequestReadPermission = onRequestReadPermission,
                                         onRequestWritePermission = onRequestWritePermission,
+                                        topPadding = topPadding,
                                         onContinue = {
                                             backStack = listOf(Destination.Gallery)
                                         }
@@ -416,7 +435,8 @@ fun App(
                                                 backStack + Destination.Detail(image, allImages)
                                         },
                                         sharedTransitionScope = this@SharedTransitionLayout,
-                                        animatedVisibilityScope = animatedVisibilityScope
+                                        animatedVisibilityScope = animatedVisibilityScope,
+                                        topPadding = topPadding
                                     )
                                 }
 
@@ -438,6 +458,7 @@ fun App(
                                         repository = repository,
                                         sharedTransitionScope = this@SharedTransitionLayout,
                                         animatedVisibilityScope = animatedVisibilityScope,
+                                        topPadding = topPadding,
                                         onAlbumClick = { album ->
                                             backStack = backStack + Destination.AlbumGallery(
                                                 album.id,
@@ -469,7 +490,8 @@ fun App(
                                                 backStack + Destination.Detail(image, allImages)
                                         },
                                         sharedTransitionScope = this@SharedTransitionLayout,
-                                        animatedVisibilityScope = animatedVisibilityScope
+                                        animatedVisibilityScope = animatedVisibilityScope,
+                                        topPadding = topPadding
                                     )
                                 }
 
@@ -499,6 +521,7 @@ fun App(
                                         animatedVisibilityScope = animatedVisibilityScope,
                                         repository = repository,
                                         onImageChange = { currentImageInDetail = it },
+                                        topPadding = topPadding,
                                         onBack = {
                                             if (backStack.size > 1) {
                                                 backStack = backStack.dropLast(1)
@@ -520,6 +543,7 @@ fun App(
                                 ) {
                                     MoveToAlbumScreen(
                                         repository = repository,
+                                        topPadding = topPadding,
                                         onAlbumSelected = { album ->
                                             scope.launch {
                                                 val updatedImage =

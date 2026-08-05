@@ -60,7 +60,8 @@ fun GalleryScreen(
     albumId: String? = null,
     onImageClick: (GalleryImage, List<GalleryImage>) -> Unit,
     sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    topPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val images by viewModel.images.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -147,7 +148,7 @@ fun GalleryScreen(
                     .clip(RoundedCornerShape(cornerRadius)),
                 contentPadding = PaddingValues(
                     start = 4.dp,
-                    top = 4.dp,
+                    top = 4.dp + topPadding,
                     end = 4.dp,
                     bottom = 100.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 ),

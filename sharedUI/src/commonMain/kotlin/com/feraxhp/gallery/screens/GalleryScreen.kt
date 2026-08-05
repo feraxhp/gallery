@@ -149,7 +149,7 @@ fun GalleryScreen(
                     start = 4.dp,
                     top = 4.dp,
                     end = 4.dp,
-                    bottom = 4.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                    bottom = 100.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 ),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)

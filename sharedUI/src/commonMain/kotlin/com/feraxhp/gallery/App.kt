@@ -23,6 +23,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -241,6 +243,12 @@ fun App(
                         .offset(y = -ScreenOffset)
                         .zIndex(1f),
                     visible = showBottomBar && !isActuallyInDetail,
+                    enter = slideInVertically(
+                        initialOffsetY = { it / 2 }
+                    ) + fadeIn( initialAlpha = 0.3f ),
+                    exit = slideOutVertically(
+                        targetOffsetY = { it / 2 }
+                    ) + fadeOut(),
                 ) {
                     HorizontalFloatingToolbar(
                         expanded = true,

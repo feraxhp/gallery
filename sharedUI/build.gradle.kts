@@ -52,6 +52,10 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.coilVideo)
+            implementation(libs.androidx.exifinterface)
+            implementation(libs.ktor.client.okhttp)
+            implementation("androidx.media3:media3-exoplayer:1.10.1")
+            implementation("androidx.media3:media3-ui:1.10.1")
         }
 
     }

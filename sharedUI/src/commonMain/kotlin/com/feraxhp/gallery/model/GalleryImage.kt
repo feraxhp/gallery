@@ -17,7 +17,20 @@ data class GalleryImage(
     val isMotionPhoto: Boolean = false,
     val duration: Long? = null,
     val width: Int = 0,
-    val height: Int = 0
+    val height: Int = 0,
+    val albumName: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val shutterSpeed: String? = null,
+    val dateTaken: Long? = null,
+    val cameraModel: String? = null,
+    val cameraManufacturer: String? = null,
+    val iso: String? = null,
+    val aperture: String? = null,
+    val focalLength: String? = null,
+    val size: Long? = null,
+    val software: String? = null,
+    val path: String? = null
 ) {
     val aspectRatio: Float
         get() = if (width > 0 && height > 0) width.toFloat() / height.toFloat() else 1f

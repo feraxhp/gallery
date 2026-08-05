@@ -1,12 +1,9 @@
 package com.feraxhp.gallery.screens
 
-import androidx.compose.animation.EnterExitState
-import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,19 +20,16 @@ import com.feraxhp.gallery.util.rememberVideoModel
 import com.feraxhp.gallery.viewmodel.GalleryViewModel
 
 @Composable
-fun AlbumsScreen(
+fun MoveToAlbumScreen(
     repository: ImageRepository,
-    animatedVisibilityScope: AnimatedVisibilityScope,
-    onAlbumClick: (Album) -> Unit
+    onAlbumSelected: (Album) -> Unit
 ) {
     val viewModel: GalleryViewModel = viewModel { GalleryViewModel(repository) }
     val albums by viewModel.albums.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
-    LaunchedEffect(animatedVisibilityScope.transition.targetState) {
-        if (animatedVisibilityScope.transition.targetState == EnterExitState.Visible) {
-            viewModel.loadAlbums()
-        }
+    LaunchedEffect(Unit) {
+        viewModel.loadAlbums()
     }
 
     if (isLoading && albums.isEmpty()) {
@@ -43,16 +37,18 @@ fun AlbumsScreen(
             CircularProgressIndicator()
         }
     } else {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+        LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             items(albums, key = { it.id }) { album ->
-                Column(
-                    modifier = Modifier.clickable { onAlbumClick(album) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onAlbumSelected(album) }
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     val model = if (album.coverUri.contains("video", ignoreCase = true)) {
                         rememberVideoModel(album.coverUri, null)
@@ -63,21 +59,23 @@ fun AlbumsScreen(
                         model = model,
                         contentDescription = album.name,
                         modifier = Modifier
-                            .aspectRatio(1f)
-                            .fillMaxWidth()
-                            .clip(MaterialTheme.shapes.medium),
+                            .size(64.dp)
+                            .clip(MaterialTheme.shapes.small),
                         contentScale = ContentScale.Crop
                     )
-                    Text(
-                        text = album.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                    Text(
-                        text = "${album.imageCount} fotos",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Column(
+                        modifier = Modifier.padding(start = 16.dp)
+                    ) {
+                        Text(
+                            text = album.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "${album.imageCount} elementos",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                 }
             }
         }

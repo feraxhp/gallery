@@ -15,9 +15,13 @@
 package com.feraxhp.gallery.androidApp
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -47,36 +51,72 @@ class AppActivity : ComponentActivity() {
 
             val context = LocalContext.current
             
-            val requiredPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val readPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 arrayOf(
                     Manifest.permission.READ_MEDIA_IMAGES,
-                    Manifest.permission.READ_MEDIA_VIDEO
+                    Manifest.permission.READ_MEDIA_VIDEO,
+                    Manifest.permission.ACCESS_MEDIA_LOCATION
                 )
             } else {
                 arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
             }
 
-            var hasPermission by remember {
+            var hasReadPermission by remember {
                 mutableStateOf(
-                    requiredPermissions.all {
+                    readPermissions.all {
                         ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
                     }
                 )
             }
 
-            val launcher = rememberLauncherForActivityResult(
+            var hasWritePermission by remember {
+                mutableStateOf(
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        Environment.isExternalStorageManager()
+                    } else {
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+                    }
+                )
+            }
+
+            val readLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestMultiplePermissions()
             ) { permissions ->
-                hasPermission = permissions.values.all { it }
+                hasReadPermission = permissions.values.all { it }
+            }
+
+            val manageLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.StartActivityForResult()
+            ) { _ ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    hasWritePermission = Environment.isExternalStorageManager()
+                }
+            }
+
+            val writeLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestPermission()
+            ) { granted ->
+                hasWritePermission = granted
             }
 
             val repository = remember { AndroidImageRepository(context) }
 
             App(
                 repository = repository,
-                hasPermission = hasPermission,
-                onRequestPermission = {
-                    launcher.launch(requiredPermissions)
+                hasReadPermission = hasReadPermission,
+                hasWritePermission = hasWritePermission,
+                onRequestReadPermission = {
+                    readLauncher.launch(readPermissions)
+                },
+                onRequestWritePermission = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                            data = Uri.parse("package:${context.packageName}")
+                        }
+                        manageLauncher.launch(intent)
+                    } else {
+                        writeLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    }
                 }
             )
         }

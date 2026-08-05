@@ -20,12 +20,17 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.filled.Collections
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.metadata
 import androidx.navigation3.ui.LocalNavAnimatedContentScope
@@ -35,9 +40,11 @@ import com.feraxhp.gallery.repository.ImageRepository
 import com.feraxhp.gallery.screens.AlbumsScreen
 import com.feraxhp.gallery.screens.DetailScreen
 import com.feraxhp.gallery.screens.GalleryScreen
+import com.feraxhp.gallery.screens.MoveToAlbumScreen
 import com.feraxhp.gallery.screens.PermissionsScreen
 import com.feraxhp.gallery.util.SetSystemBarsColor
 import com.feraxhp.ktheme.DynamicTheme
+import kotlinx.coroutines.launch
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -47,28 +54,62 @@ import com.feraxhp.ktheme.DynamicTheme
 @Composable
 fun App(
     repository: ImageRepository,
-    hasPermission: Boolean,
-    onRequestPermission: () -> Unit
+    hasReadPermission: Boolean,
+    hasWritePermission: Boolean,
+    onRequestReadPermission: () -> Unit,
+    onRequestWritePermission: () -> Unit
 ) {
     val isSystemDark = isSystemInDarkTheme()
     var backStack by remember {
         mutableStateOf(
             listOf<Destination>(
-                if (hasPermission) Destination.Gallery else Destination.Permissions
+                if (hasReadPermission) Destination.Gallery else Destination.Permissions
             )
         )
     }
 
-    LaunchedEffect(hasPermission) {
-        if (hasPermission && backStack.lastOrNull() == Destination.Permissions) {
+    LaunchedEffect(hasReadPermission) {
+        if (hasReadPermission && backStack.lastOrNull() == Destination.Permissions) {
             backStack = listOf(Destination.Gallery)
         }
     }
 
     val currentDestination = backStack.lastOrNull()
     var isDetailActive by remember { mutableStateOf(false) }
+    var currentImageInDetail by remember { mutableStateOf<com.feraxhp.gallery.model.GalleryImage?>(null) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val clipboardManager = LocalClipboardManager.current
 
     SetSystemBarsColor(isDark = isDetailActive || isSystemDark)
+
+    if (showDeleteConfirmation && currentImageInDetail != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Borrar imagen") },
+            text = { Text("¿Estás seguro de que quieres borrar esta imagen?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val imageToDelete = currentImageInDetail!!
+                    scope.launch {
+                        repository.deleteImage(imageToDelete)
+                        showDeleteConfirmation = false
+                        // Si borramos, volvemos atrás
+                        if (backStack.size > 1) {
+                            backStack = backStack.dropLast(1)
+                        }
+                    }
+                }) {
+                    Text("Borrar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
 
     DynamicTheme {
         val appBarContainerColor by animateColorAsState(if (isDetailActive) Color.Black else MaterialTheme.colorScheme.surface)
@@ -84,7 +125,8 @@ fun App(
                     Destination.Albums -> "Álbumes"
                     is Destination.AlbumGallery -> currentDestination.albumName
                     is Destination.Detail -> "Detalle"
-                    null -> ""
+                    is Destination.MoveToAlbum -> "Mover a álbum"
+                    else -> ""
                 }
                 TopAppBar(
                     title = { Text(title) },
@@ -95,7 +137,7 @@ fun App(
                         actionIconContentColor = appBarContentColor
                     ),
                     navigationIcon = {
-                        if (backStack.size > 1) {
+                        if (backStack.size > 1 && currentDestination != Destination.Albums) {
                             IconButton(onClick = {
                                 if (backStack.size > 1) {
                                     backStack = backStack.dropLast(1)
@@ -107,12 +149,35 @@ fun App(
                                 )
                             }
                         }
+                    },
+                    actions = {
+                        if (currentDestination is Destination.Detail && isDetailActive && currentImageInDetail != null) {
+                            IconButton(onClick = {
+                                currentImageInDetail?.let {
+                                    clipboardManager.setText(AnnotatedString(it.uri))
+                                }
+                            }) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copiar")
+                            }
+                            IconButton(onClick = {
+                                currentImageInDetail?.let {
+                                    backStack = backStack + Destination.MoveToAlbum(it, (currentDestination as Destination.Detail).allImages)
+                                }
+                            }) {
+                                Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = "Mover")
+                            }
+                            IconButton(onClick = {
+                                showDeleteConfirmation = true
+                            }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Borrar")
+                            }
+                        }
                     }
                 )
             },
             bottomBar = {
                 val isActuallyInDetail = currentDestination is Destination.Detail && isDetailActive
-                val showBottomBar = hasPermission && (currentDestination == Destination.Gallery || currentDestination == Destination.Albums || (currentDestination is Destination.Detail && !isDetailActive))
+                val showBottomBar = hasReadPermission && (currentDestination == Destination.Gallery || currentDestination == Destination.Albums || (currentDestination is Destination.Detail && !isDetailActive))
                 
                 if (showBottomBar && !isActuallyInDetail) {
                     NavigationBar(
@@ -133,7 +198,7 @@ fun App(
                             selected = currentDestination == Destination.Albums || currentDestination is Destination.AlbumGallery,
                             onClick = {
                                 if (currentDestination != Destination.Albums) {
-                                    backStack = listOf(Destination.Albums)
+                                    backStack = listOf(Destination.Gallery, Destination.Albums)
                                 }
                             },
                             icon = { Icon(Icons.Default.Collections, contentDescription = "Álbumes") },
@@ -156,7 +221,12 @@ fun App(
                     entryProvider = { key: Destination ->
                         when (key) {
                             Destination.Permissions -> NavEntry(key) {
-                                PermissionsScreen(onRequestPermission = onRequestPermission)
+                                PermissionsScreen(
+                                    hasReadPermission = hasReadPermission,
+                                    hasWritePermission = hasWritePermission,
+                                    onRequestReadPermission = onRequestReadPermission,
+                                    onRequestWritePermission = onRequestWritePermission
+                                )
                             }
                             Destination.Gallery -> NavEntry(
                                 key,
@@ -170,8 +240,8 @@ fun App(
                                 val animatedVisibilityScope = LocalNavAnimatedContentScope.current
                                 GalleryScreen(
                                     repository = repository,
-                                    onImageClick = { image ->
-                                        backStack = backStack + Destination.Detail(image)
+                                    onImageClick = { image, allImages ->
+                                        backStack = backStack + Destination.Detail(image, allImages)
                                     },
                                     sharedTransitionScope = this@SharedTransitionLayout,
                                     animatedVisibilityScope = animatedVisibilityScope
@@ -179,8 +249,10 @@ fun App(
                             }
                             Destination.Albums -> NavEntry(key) {
                                 LaunchedEffect(Unit) { isDetailActive = false }
+                                val animatedVisibilityScope = LocalNavAnimatedContentScope.current
                                 AlbumsScreen(
                                     repository = repository,
+                                    animatedVisibilityScope = animatedVisibilityScope,
                                     onAlbumClick = { album ->
                                         backStack = backStack + Destination.AlbumGallery(album.id, album.name)
                                     }
@@ -199,8 +271,8 @@ fun App(
                                 GalleryScreen(
                                     repository = repository,
                                     albumId = key.albumId,
-                                    onImageClick = { image ->
-                                        backStack = backStack + Destination.Detail(image)
+                                    onImageClick = { image, allImages ->
+                                        backStack = backStack + Destination.Detail(image, allImages)
                                     },
                                     sharedTransitionScope = this@SharedTransitionLayout,
                                     animatedVisibilityScope = animatedVisibilityScope
@@ -223,12 +295,43 @@ fun App(
                                     isDetailActive = isTargetVisible
                                 }
                                 DetailScreen(
-                                    image = key.image,
+                                    images = key.allImages,
+                                    initialIndex = key.allImages.indexOfFirst { it.id == key.image.id }.coerceAtLeast(0),
                                     sharedTransitionScope = this@SharedTransitionLayout,
                                     animatedVisibilityScope = animatedVisibilityScope,
+                                    repository = repository,
+                                    onImageChange = { currentImageInDetail = it },
                                     onBack = {
                                         if (backStack.size > 1) {
                                             backStack = backStack.dropLast(1)
+                                        }
+                                    }
+                                )
+                            }
+                            is Destination.MoveToAlbum -> NavEntry(key) {
+                                MoveToAlbumScreen(
+                                    repository = repository,
+                                    onAlbumSelected = { album ->
+                                        scope.launch {
+                                            val updatedImage = repository.moveImage(key.image, album.id)
+                                            if (updatedImage != null) {
+                                                val newAllImages = key.allImages.map {
+                                                    if (it.id == updatedImage.id) updatedImage else it
+                                                }
+                                                // Actualizamos la entrada anterior en el backstack (el Detail)
+                                                // y quitamos la actual (MoveToAlbum)
+                                                backStack = backStack.dropLast(1).let { list ->
+                                                    if (list.isNotEmpty() && list.last() is Destination.Detail) {
+                                                        list.dropLast(1) + Destination.Detail(updatedImage, newAllImages)
+                                                    } else {
+                                                        list
+                                                    }
+                                                }
+                                            } else {
+                                                if (backStack.size > 1) {
+                                                    backStack = backStack.dropLast(1)
+                                                }
+                                            }
                                         }
                                     }
                                 )
@@ -248,10 +351,17 @@ fun AppPreview() {
         override suspend fun getImages(): List<com.feraxhp.gallery.model.GalleryImage> = emptyList()
         override suspend fun getImagesByAlbum(albumId: String): List<com.feraxhp.gallery.model.GalleryImage> = emptyList()
         override suspend fun getAlbums(): List<com.feraxhp.gallery.model.Album> = emptyList()
+        override suspend fun getImageById(id: Long, type: com.feraxhp.gallery.model.MediaType): com.feraxhp.gallery.model.GalleryImage? = null
+        override suspend fun deleteImage(image: com.feraxhp.gallery.model.GalleryImage): Boolean = true
+        override suspend fun moveImage(image: com.feraxhp.gallery.model.GalleryImage, albumId: String): com.feraxhp.gallery.model.GalleryImage? = null
+        override suspend fun copyImage(image: com.feraxhp.gallery.model.GalleryImage): Boolean = true
+        override fun openInFileManager(path: String) {}
     }
     App(
         repository = mockRepository,
-        hasPermission = true,
-        onRequestPermission = {}
+        hasReadPermission = true,
+        hasWritePermission = true,
+        onRequestReadPermission = {},
+        onRequestWritePermission = {}
     )
 }

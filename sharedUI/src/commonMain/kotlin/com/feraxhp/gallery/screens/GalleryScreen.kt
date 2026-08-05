@@ -40,7 +40,7 @@ import org.jetbrains.compose.resources.painterResource
 fun GalleryScreen(
     repository: ImageRepository,
     albumId: String? = null,
-    onImageClick: (GalleryImage) -> Unit,
+    onImageClick: (GalleryImage, List<GalleryImage>) -> Unit,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
@@ -56,8 +56,10 @@ fun GalleryScreen(
         }
     }
 
-    LaunchedEffect(albumId) {
-        viewModel.loadImages(albumId)
+    LaunchedEffect(albumId, animatedVisibilityScope.transition.targetState) {
+        if (animatedVisibilityScope.transition.targetState == EnterExitState.Visible) {
+            viewModel.loadImages(albumId)
+        }
     }
 
     if (isLoading && images.isEmpty()) {
@@ -107,7 +109,7 @@ fun GalleryScreen(
                                 .aspectRatio(1f)
                                 .fillMaxWidth()
                                 .clip(MaterialTheme.shapes.medium)
-                                .clickable { onImageClick(image) }
+                                .clickable { onImageClick(image, images) }
                         ) {
                             AsyncImage(
                                 model = model,

@@ -18,6 +18,7 @@ data class GalleryImage(
     val duration: Long? = null,
     val width: Int = 0,
     val height: Int = 0,
+    val albumId: String? = null,
     val albumName: String? = null,
     val latitude: Double? = null,
     val longitude: Double? = null,

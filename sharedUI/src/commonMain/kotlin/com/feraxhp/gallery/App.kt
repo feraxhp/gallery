@@ -58,6 +58,7 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FloatingToolbarDefaults
@@ -66,6 +67,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -81,10 +87,17 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.navigation3.runtime.NavEntry
@@ -104,7 +117,10 @@ import com.feraxhp.gallery.screens.PermissionsScreen
 import com.feraxhp.gallery.util.SetSystemBarsColor
 import com.feraxhp.gallery.viewmodel.GalleryViewModel
 import com.feraxhp.ktheme.DynamicTheme
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -146,6 +162,8 @@ fun App(
         )
     }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    var pendingDeleteJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
 
     SetSystemBarsColor(isDark = isDetailActive || isSystemDark)
@@ -158,13 +176,38 @@ fun App(
             confirmButton = {
                 TextButton(onClick = {
                     val imageToDelete = currentImageInDetail!!
-                    scope.launch {
-                        galleryViewModel.markAsDeleted(imageToDelete.id)
-                        repository.deleteImage(imageToDelete)
-                        showDeleteConfirmation = false
-                        // Si borramos, volvemos atrás
+                    val currentBackstack = backStack
+                    showDeleteConfirmation = false
+                    
+                    snackbarHostState.currentSnackbarData?.dismiss()
+                    pendingDeleteJob?.cancel()
+                    pendingDeleteJob = scope.launch {
+                        // Salimos de la pantalla de detalle
                         if (backStack.size > 1) {
                             backStack = backStack.dropLast(1)
+                        }
+
+                        // Activamos la animación de shatter
+                        galleryViewModel.markAsDeleted(imageToDelete.id)
+                        
+                        // Esperamos unos 300ms para que la animación capture los datos necesarios 
+                        // antes de ocultar la imagen del grid
+                        delay(400.milliseconds)
+                        galleryViewModel.hideImage(imageToDelete.id)
+                        
+                        val result = snackbarHostState.showSnackbar(
+                            message = "Imagen eliminada",
+                            actionLabel = "Deshacer",
+                            duration = SnackbarDuration.Short
+                        )
+                        
+                        if (result == SnackbarResult.ActionPerformed) {
+                            // Si se pulsa Undo, volvemos a mostrarla y navegamos al detalle
+                            galleryViewModel.restoreImage(imageToDelete.id)
+                            backStack = currentBackstack
+                        } else {
+                            // Si no se pulsa, borramos definitivamente
+                            repository.deleteImage(imageToDelete)
                         }
                     }
                 }) {
@@ -184,10 +227,52 @@ fun App(
             if (isDetailActive) Color.Black else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
         )
         val appBarContentColor by animateColorAsState(if (isDetailActive) Color.White else MaterialTheme.colorScheme.onSurface)
-        val scaffoldContainerColor by animateColorAsState(if (isDetailActive) Color.Black else MaterialTheme.colorScheme.background)
 
         Scaffold(
-            containerColor = scaffoldContainerColor,
+            containerColor = MaterialTheme.colorScheme.surface,
+            snackbarHost = {
+                SnackbarHost(snackbarHostState) { data ->
+                    val message = data.visuals.message
+                    val annotatedString = if (message.startsWith("Imagen movida a ")) {
+                        val albumName = message.substringAfter("Imagen movida a ")
+                        buildAnnotatedString {
+                            append("Imagen movida a ")
+                            withStyle(
+                                style = SpanStyle(
+                                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontStyle = FontStyle.Italic,
+                                    textDecoration = TextDecoration.Underline,
+                                )
+                            ) {
+                                append(albumName)
+                            }
+                        }
+                    } else {
+                        AnnotatedString(message)
+                    }
+                    Snackbar(
+                        modifier = Modifier
+                            .padding(horizontal = 32.dp)
+                            .clip(shape = MaterialTheme.shapes.medium)
+                        ,
+                        action = {
+                            data.visuals.actionLabel?.let { actionLabel ->
+                                TextButton(
+                                    colors = ButtonDefaults.textButtonColors().copy(
+                                        contentColor = MaterialTheme.colorScheme.inversePrimary
+                                    ),
+                                    onClick = { data.performAction() }
+                                ) {
+                                    Text(actionLabel)
+                                }
+                            }
+                        }
+                    ) {
+                        Text(annotatedString)
+                    }
+                }
+            },
             topBar = {
                 val title = when (currentDestination) {
                     Destination.Permissions -> ""
@@ -546,6 +631,7 @@ fun App(
                                         topPadding = topPadding,
                                         onAlbumSelected = { album ->
                                             scope.launch {
+                                                val originalAlbumId = key.image.albumId
                                                 val updatedImage =
                                                     repository.moveImage(key.image, album.id)
                                                 if (updatedImage != null) {
@@ -565,7 +651,35 @@ fun App(
                                                                 list
                                                             }
                                                         }
+                                                    
+                                                    snackbarHostState.currentSnackbarData?.dismiss()
+                                                    // Snackbar de éxito con opción de Deshacer
+                                                    val result = snackbarHostState.showSnackbar(
+                                                        message = "Imagen movida a ${album.name}",
+                                                        actionLabel = "Deshacer",
+                                                        duration = SnackbarDuration.Short
+                                                    )
+                                                    
+                                                    if (result == SnackbarResult.ActionPerformed && originalAlbumId != null) {
+                                                        // Deshacer el movimiento
+                                                        val revertedImage = repository.moveImage(updatedImage, originalAlbumId)
+                                                        if (revertedImage != null) {
+                                                            // Restaurar navegación y mostrar mensaje de cancelación
+                                                            val revertedAllImages = newAllImages.map {
+                                                                if (it.id == revertedImage.id) revertedImage else it
+                                                            }
+                                                            if (backStack.isNotEmpty() && backStack.last() is Destination.Detail) {
+                                                                backStack = backStack.dropLast(1) + Destination.Detail(
+                                                                    revertedImage,
+                                                                    revertedAllImages
+                                                                )
+                                                            }
+                                                            snackbarHostState.showSnackbar("Movimiento cancelado")
+                                                        }
+                                                    }
                                                 } else {
+                                                    snackbarHostState.currentSnackbarData?.dismiss()
+                                                    snackbarHostState.showSnackbar("Error al mover la imagen")
                                                     if (backStack.size > 1) {
                                                         backStack = backStack.dropLast(1)
                                                     }

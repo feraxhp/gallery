@@ -7,15 +7,22 @@ import com.feraxhp.gallery.model.Album
 import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.repository.ImageRepository
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class GalleryViewModel(private val repository: ImageRepository) : ViewModel() {
 
     private val logger = Logger.withTag("GalleryViewModel")
     private val _images = MutableStateFlow<List<GalleryImage>>(emptyList())
-    val images: StateFlow<List<GalleryImage>> = _images.asStateFlow()
+    private val _hiddenImageIds = MutableStateFlow<Set<Long>>(emptySet())
+
+    val images: StateFlow<List<GalleryImage>> = combine(_images, _hiddenImageIds) { images, hiddenIds ->
+        images.filter { it.id !in hiddenIds }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _albums = MutableStateFlow<List<Album>>(emptyList())
     val albums: StateFlow<List<Album>> = _albums.asStateFlow()
@@ -28,6 +35,14 @@ class GalleryViewModel(private val repository: ImageRepository) : ViewModel() {
 
     fun markAsDeleted(imageId: Long) {
         _deletedImageId.value = imageId
+    }
+
+    fun hideImage(imageId: Long) {
+        _hiddenImageIds.value += imageId
+    }
+
+    fun restoreImage(imageId: Long) {
+        _hiddenImageIds.value -= imageId
     }
 
     fun clearDeletedState() {

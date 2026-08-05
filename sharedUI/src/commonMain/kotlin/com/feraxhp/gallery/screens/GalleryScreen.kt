@@ -46,6 +46,7 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.painterResource
+import kotlin.time.Duration.Companion.milliseconds
 
 private data class ShatterData(
     val bitmap: ImageBitmap,
@@ -86,10 +87,9 @@ fun GalleryScreen(
             if (bounds != null && bitmap != null) {
                 // Esperar a que la transición sea visible (comienza antes de que termine del todo)
                 snapshotFlow { animatedVisibilityScope.transition.targetState == EnterExitState.Visible }
-                    .filter { it }
-                    .first()
-                
-                delay(390) // Retraso de 50ms para sincronizar mejor
+                    .first { it }
+
+                delay(390.milliseconds) // Retraso de 50ms para sincronizar mejor
                 
                 activeShatterEffect = ShatterData(
                     bitmap = bitmap,

@@ -76,7 +76,8 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
             MediaStore.MediaColumns.HEIGHT,
             MediaStore.MediaColumns.ORIENTATION,
             MediaStore.MediaColumns.DATA,
-            MediaStore.MediaColumns.SIZE
+            MediaStore.MediaColumns.SIZE,
+            MediaStore.MediaColumns.BUCKET_ID
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -107,6 +108,7 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
             )?.use { cursor ->
                 val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
                 val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+                val bucketIdColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.BUCKET_ID)
                 val dateAddedColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
                 val widthColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.WIDTH)
                 val heightColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.HEIGHT)
@@ -131,6 +133,7 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idColumn)
                     val name = cursor.getString(nameColumn)
+                    val albumId = cursor.getString(bucketIdColumn)
                     val dateAdded = cursor.getLong(dateAddedColumn)
                     val orientation = cursor.getInt(orientationColumn)
                     
@@ -181,7 +184,7 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
                     list.add(
                         GalleryImage(
                             id, contentUri.toString(), name, dateAdded, type, detectedMotionPhoto,
-                            duration, width, height, albumName, metadata.latitude, metadata.longitude,
+                            duration, width, height, albumId, albumName, metadata.latitude, metadata.longitude,
                             metadata.shutterSpeed, dateTaken, metadata.cameraModel, metadata.cameraManufacturer,
                             metadata.iso, metadata.aperture, metadata.focalLength, size, metadata.software, path
                         )
@@ -211,6 +214,7 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
             MediaStore.MediaColumns.WIDTH,
             MediaStore.MediaColumns.HEIGHT,
             MediaStore.MediaColumns.ORIENTATION,
+            MediaStore.MediaColumns.BUCKET_ID,
             "bucket_display_name",
             MediaStore.MediaColumns.DATA,
             MediaStore.MediaColumns.SIZE
@@ -225,6 +229,7 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
             )?.use { cursor ->
                 val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
                 val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+                val bucketIdColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.BUCKET_ID)
                 val dateAddedColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
                 val widthColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.WIDTH)
                 val heightColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.HEIGHT)
@@ -236,6 +241,7 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idColumn)
                     val name = cursor.getString(nameColumn)
+                    val albumId = cursor.getString(bucketIdColumn)
                     val dateAdded = cursor.getLong(dateAddedColumn)
                     val orientation = cursor.getInt(orientationColumn)
                     var albumName = if (bucketNameColumn != -1) cursor.getString(bucketNameColumn) else null
@@ -261,7 +267,7 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
                         GalleryImage(
                             id = id, uri = contentUri.toString(), name = name, dateAdded = dateAdded, type = type,
                             isMotionPhoto = false, duration = null, width = width, height = height,
-                            albumName = albumName, latitude = metadata.latitude, longitude = metadata.longitude,
+                            albumId = albumId, albumName = albumName, latitude = metadata.latitude, longitude = metadata.longitude,
                             shutterSpeed = metadata.shutterSpeed, dateTaken = null,
                             cameraModel = metadata.cameraModel, cameraManufacturer = metadata.cameraManufacturer,
                             iso = metadata.iso, aperture = metadata.aperture, focalLength = metadata.focalLength,

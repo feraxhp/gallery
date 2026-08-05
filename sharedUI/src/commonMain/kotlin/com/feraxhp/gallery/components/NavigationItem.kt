@@ -74,7 +74,7 @@ fun NavigationItem(
     ) {
         Surface(
             modifier = Modifier
-                .padding(horizontal = 4.dp, vertical = 2.dp)
+                .padding(horizontal = 4.dp, vertical = 1.dp)
                 .clip(CircleShape)
                 .clickable { onClick() },
             color = containerColor,
@@ -82,14 +82,14 @@ fun NavigationItem(
         ) {
             Column(
                 modifier = Modifier
-                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                    .padding(horizontal = 20.dp, vertical = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = label,
                     tint = contentColor,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(22.dp)
                 )
                 Text(
                     text = label,

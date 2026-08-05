@@ -30,6 +30,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -310,6 +311,7 @@ fun App(
                             colors = FloatingToolbarDefaults.standardFloatingToolbarColors(
                                 toolbarContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
                             ),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                             expandedShadowElevation = 6.dp,
                             content = {
                                 NavigationItem(
@@ -339,7 +341,7 @@ fun App(
                         Spacer(Modifier.width(12.dp))
 
                         Surface(
-                            modifier = Modifier.size(64.dp),
+                            modifier = Modifier.size(52.dp),
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
                             shadowElevation = 6.dp
@@ -352,7 +354,7 @@ fun App(
                                     imageVector = Icons.Default.Tune,
                                     contentDescription = "Filtrar",
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         }

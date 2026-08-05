@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -19,6 +20,7 @@ fun PermissionsScreen(
     hasWritePermission: Boolean,
     onRequestReadPermission: () -> Unit,
     onRequestWritePermission: () -> Unit,
+    onContinue: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -27,7 +29,7 @@ fun PermissionsScreen(
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Encabezado con icono grande
         Icon(
@@ -77,6 +79,18 @@ fun PermissionsScreen(
             onClick = onRequestWritePermission
         )
 
+        if (hasReadPermission && !hasWritePermission) {
+            Spacer(modifier = Modifier.height(32.dp))
+            TextButton(
+                onClick = onContinue,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Continuar con acceso limitado")
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+            }
+        }
+
         Spacer(modifier = Modifier.height(48.dp))
     }
 }
@@ -108,17 +122,17 @@ private fun PermissionCard(
             Surface(
                 shape = MaterialTheme.shapes.large,
                 color = if (isGranted)
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                    MaterialTheme.colorScheme.primary
                 else
                     MaterialTheme.colorScheme.primaryContainer,
                 modifier = Modifier.size(52.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = icon,
+                        imageVector = if (isGranted) Icons.Default.Check else icon,
                         contentDescription = null,
                         tint = if (isGranted)
-                            MaterialTheme.colorScheme.primary
+                            MaterialTheme.colorScheme.onPrimary
                         else
                             MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.size(28.dp)
@@ -132,32 +146,37 @@ private fun PermissionCard(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = if (isGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = androidx.compose.ui.unit.TextUnit.Unspecified // To avoid issues if it clips
                 )
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
             if (isGranted) {
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = "Otorgado",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(28.dp)
+                Text(
+                    text = "Listo",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(end = 8.dp)
                 )
             } else {
                 Button(
                     onClick = onClick,
                     shape = MaterialTheme.shapes.medium,
-                    contentPadding = PaddingValues(horizontal = 16.dp)
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                 ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Configurar",
                         style = MaterialTheme.typography.labelLarge

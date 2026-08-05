@@ -63,13 +63,16 @@ fun App(
     var backStack by remember {
         mutableStateOf(
             listOf<Destination>(
-                if (hasReadPermission) Destination.Gallery else Destination.Permissions
+                if (hasReadPermission && hasWritePermission) Destination.Gallery else Destination.Permissions
             )
         )
     }
 
-    LaunchedEffect(hasReadPermission) {
-        if (hasReadPermission && backStack.lastOrNull() == Destination.Permissions) {
+    val currentReadPermission by rememberUpdatedState(hasReadPermission)
+    val currentWritePermission by rememberUpdatedState(hasWritePermission)
+
+    LaunchedEffect(hasReadPermission, hasWritePermission) {
+        if (hasReadPermission && hasWritePermission && backStack.lastOrNull() == Destination.Permissions) {
             backStack = listOf(Destination.Gallery)
         }
     }
@@ -120,7 +123,7 @@ fun App(
             containerColor = scaffoldContainerColor,
             topBar = {
                 val title = when (currentDestination) {
-                    Destination.Permissions -> "Permisos"
+                    Destination.Permissions -> ""
                     Destination.Gallery -> "Fotos"
                     Destination.Albums -> "Álbumes"
                     is Destination.AlbumGallery -> currentDestination.albumName
@@ -222,10 +225,13 @@ fun App(
                         when (key) {
                             Destination.Permissions -> NavEntry(key) {
                                 PermissionsScreen(
-                                    hasReadPermission = hasReadPermission,
-                                    hasWritePermission = hasWritePermission,
+                                    hasReadPermission = currentReadPermission,
+                                    hasWritePermission = currentWritePermission,
                                     onRequestReadPermission = onRequestReadPermission,
-                                    onRequestWritePermission = onRequestWritePermission
+                                    onRequestWritePermission = onRequestWritePermission,
+                                    onContinue = {
+                                        backStack = listOf(Destination.Gallery)
+                                    }
                                 )
                             }
                             Destination.Gallery -> NavEntry(

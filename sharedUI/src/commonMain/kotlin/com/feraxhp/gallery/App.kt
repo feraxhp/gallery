@@ -29,6 +29,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -42,8 +44,10 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DriveFileMove
@@ -51,15 +55,17 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoAlbum
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FloatingToolbarDefaults.ScreenOffset
+import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -281,7 +287,7 @@ fun App(
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
-                        .offset(y = (-8).dp)
+                        .offset(y = (-16).dp)
                         .zIndex(1f),
                     visible = showBottomBar && !isActuallyInDetail,
                     enter = slideInVertically(
@@ -291,32 +297,65 @@ fun App(
                         targetOffsetY = { it / 2 }
                     ) + fadeOut(),
                 ) {
-                    HorizontalFloatingToolbar(
-                        expanded = true,
+                    Row(
                         modifier = Modifier
-                            .wrapContentWidth()
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        NavigationItem(
-                            selected = currentDestination == Destination.Gallery,
-                            label = "Fotos",
-                            icon = Icons.Default.PhotoLibrary,
-                            onClick = {
-                                if (currentDestination != Destination.Gallery) {
-                                    backStack = listOf(Destination.Gallery)
-                                }
+                        HorizontalFloatingToolbar(
+                            expanded = true,
+                            modifier = Modifier.wrapContentWidth(),
+                            colors = FloatingToolbarDefaults.standardFloatingToolbarColors(
+                                toolbarContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                            ),
+                            expandedShadowElevation = 6.dp,
+                            content = {
+                                NavigationItem(
+                                    selected = currentDestination == Destination.Gallery,
+                                    label = "Fotos",
+                                    icon = Icons.Default.PhotoLibrary,
+                                    onClick = {
+                                        if (currentDestination != Destination.Gallery) {
+                                            backStack = listOf(Destination.Gallery)
+                                        }
+                                    }
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                NavigationItem(
+                                    selected = currentDestination == Destination.Albums || currentDestination is Destination.AlbumGallery,
+                                    label = "Álbumes",
+                                    icon = Icons.Default.PhotoAlbum,
+                                    onClick = {
+                                        if (currentDestination != Destination.Albums) {
+                                            backStack = listOf(Destination.Gallery, Destination.Albums)
+                                        }
+                                    }
+                                )
                             }
                         )
-                        Spacer(Modifier.width(8.dp))
-                        NavigationItem(
-                            selected = currentDestination == Destination.Albums || currentDestination is Destination.AlbumGallery,
-                            label = "Albums",
-                            icon = Icons.Default.PhotoAlbum,
-                            onClick = {
-                                if (currentDestination != Destination.Albums) {
-                                    backStack = listOf(Destination.Gallery, Destination.Albums)
-                                }
+
+                        Spacer(Modifier.width(12.dp))
+
+                        Surface(
+                            modifier = Modifier.size(64.dp),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
+                            shadowElevation = 6.dp
+                        ) {
+                            IconButton(
+                                onClick = { /* TODO: Implement filter */ },
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Tune,
+                                    contentDescription = "Filtrar",
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(28.dp)
+                                )
                             }
-                        )
+                        }
                     }
                 }
                 SharedTransitionLayout {

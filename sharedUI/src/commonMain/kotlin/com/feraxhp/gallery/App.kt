@@ -268,7 +268,7 @@ fun App(
                         Spacer(Modifier.width(8.dp))
                         NavigationItem(
                             selected = currentDestination == Destination.Albums || currentDestination is Destination.AlbumGallery,
-                            label = "Galería",
+                            label = "Albums",
                             icon = Icons.Default.PhotoAlbum,
                             onClick = {
                                 if (currentDestination != Destination.Albums) {

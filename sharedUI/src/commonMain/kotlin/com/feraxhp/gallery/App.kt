@@ -353,6 +353,7 @@ fun App(
                                         LocalNavAnimatedContentScope.current
                                     AlbumsScreen(
                                         repository = repository,
+                                        sharedTransitionScope = this@SharedTransitionLayout,
                                         animatedVisibilityScope = animatedVisibilityScope,
                                         onAlbumClick = { album ->
                                             backStack = backStack + Destination.AlbumGallery(

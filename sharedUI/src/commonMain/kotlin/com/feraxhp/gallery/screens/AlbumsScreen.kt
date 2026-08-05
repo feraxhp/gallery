@@ -1,7 +1,7 @@
 package com.feraxhp.gallery.screens
 
-import androidx.compose.animation.EnterExitState
-import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -22,9 +22,11 @@ import com.feraxhp.gallery.repository.ImageRepository
 import com.feraxhp.gallery.util.rememberVideoModel
 import com.feraxhp.gallery.viewmodel.GalleryViewModel
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun AlbumsScreen(
     repository: ImageRepository,
+    sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onAlbumClick: (Album) -> Unit
 ) {
@@ -51,33 +53,41 @@ fun AlbumsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             items(albums, key = { it.id }) { album ->
-                Column(
-                    modifier = Modifier.clickable { onAlbumClick(album) }
-                ) {
-                    val model = if (album.coverUri.contains("video", ignoreCase = true)) {
-                        rememberVideoModel(album.coverUri, null)
-                    } else {
-                        album.coverUri
-                    }
-                    AsyncImage(
-                        model = model,
-                        contentDescription = album.name,
+                with(sharedTransitionScope) {
+                    Column(
                         modifier = Modifier
-                            .aspectRatio(1f)
-                            .fillMaxWidth()
-                            .clip(MaterialTheme.shapes.medium),
-                        contentScale = ContentScale.Crop
-                    )
-                    Text(
-                        text = album.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                    Text(
-                        text = "${album.imageCount} fotos",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                            .sharedBounds(
+                                sharedContentState = rememberSharedContentState(key = "album-${album.id}"),
+                                animatedVisibilityScope = animatedVisibilityScope,
+                                boundsTransform = { _, _ -> tween(500) }
+                            )
+                            .clickable { onAlbumClick(album) }
+                    ) {
+                        val model = if (album.coverUri.contains("video", ignoreCase = true)) {
+                            rememberVideoModel(album.coverUri, null)
+                        } else {
+                            album.coverUri
+                        }
+                        AsyncImage(
+                            model = model,
+                            contentDescription = album.name,
+                            modifier = Modifier
+                                .aspectRatio(1f)
+                                .fillMaxWidth()
+                                .clip(MaterialTheme.shapes.medium),
+                            contentScale = ContentScale.Crop
+                        )
+                        Text(
+                            text = album.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                        Text(
+                            text = "${album.imageCount} fotos",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                 }
             }
         }

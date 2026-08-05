@@ -145,7 +145,12 @@ fun GalleryScreen(
                         } else Modifier
                     )
                     .clip(RoundedCornerShape(cornerRadius)),
-                contentPadding = PaddingValues(4.dp),
+                contentPadding = PaddingValues(
+                    start = 4.dp,
+                    top = 4.dp,
+                    end = 4.dp,
+                    bottom = 4.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                ),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {

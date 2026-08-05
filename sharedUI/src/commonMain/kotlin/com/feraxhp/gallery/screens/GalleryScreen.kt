@@ -64,7 +64,7 @@ fun GalleryScreen(
 
     if (isLoading && images.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+            LoadingIndicator()
         }
     } else {
         LazyVerticalGrid(

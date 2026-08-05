@@ -34,7 +34,7 @@ fun MoveToAlbumScreen(
 
     if (isLoading && albums.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+            LoadingIndicator()
         }
     } else {
         LazyColumn(

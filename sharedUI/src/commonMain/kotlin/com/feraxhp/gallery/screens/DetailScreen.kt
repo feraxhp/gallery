@@ -228,6 +228,12 @@ private fun DetailImageItem(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .graphicsLayer(
+                    scaleX = scale.value,
+                    scaleY = scale.value,
+                    translationX = offsetX.value,
+                    translationY = offsetY.value
+                )
                 .pointerInput(Unit) {
                     awaitEachGesture {
                         var isSwipingVertical = false
@@ -330,12 +336,6 @@ private fun DetailImageItem(
                         }
                     )
                     .clip(RoundedCornerShape(cornerRadius))
-                    .graphicsLayer(
-                        scaleX = scale.value,
-                        scaleY = scale.value,
-                        translationX = offsetX.value,
-                        translationY = offsetY.value
-                    )
             ) {
                 AsyncImage(
                     model = model,

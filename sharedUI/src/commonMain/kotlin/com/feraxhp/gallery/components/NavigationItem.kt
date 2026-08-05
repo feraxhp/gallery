@@ -42,6 +42,7 @@ fun NavigationItem(
     selected: Boolean,
     label: String,
     icon: ImageVector,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit = {},
 ) {
     val contentColor = if (selected) {
@@ -73,7 +74,7 @@ fun NavigationItem(
         hasAction = true
     ) {
         Surface(
-            modifier = Modifier
+            modifier = modifier
                 .padding(horizontal = 4.dp, vertical = 1.dp)
                 .clip(CircleShape)
                 .clickable { onClick() },
@@ -82,7 +83,7 @@ fun NavigationItem(
         ) {
             Column(
                 modifier = Modifier
-                    .padding(horizontal = 20.dp, vertical = 4.dp),
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Icon(

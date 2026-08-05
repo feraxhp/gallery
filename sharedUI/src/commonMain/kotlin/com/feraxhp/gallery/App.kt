@@ -318,17 +318,18 @@ fun App(
                                     selected = currentDestination == Destination.Gallery,
                                     label = "Fotos",
                                     icon = Icons.Default.PhotoLibrary,
+                                    modifier = Modifier.width(100.dp),
                                     onClick = {
                                         if (currentDestination != Destination.Gallery) {
                                             backStack = listOf(Destination.Gallery)
                                         }
                                     }
                                 )
-                                Spacer(Modifier.width(4.dp))
                                 NavigationItem(
                                     selected = currentDestination == Destination.Albums || currentDestination is Destination.AlbumGallery,
                                     label = "Álbumes",
                                     icon = Icons.Default.PhotoAlbum,
+                                    modifier = Modifier.width(100.dp),
                                     onClick = {
                                         if (currentDestination != Destination.Albums) {
                                             backStack = listOf(Destination.Gallery, Destination.Albums)

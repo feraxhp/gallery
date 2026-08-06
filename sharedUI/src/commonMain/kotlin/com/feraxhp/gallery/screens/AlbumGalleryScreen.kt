@@ -229,6 +229,7 @@ fun AlbumGalleryScreen(
                                                     )
                                             }
                                             .clip(MaterialTheme.shapes.medium)
+                                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                                             .clickable { onImageClick(image, images) }
                                     ) {
                                         AsyncImage(

@@ -124,7 +124,8 @@ fun AlbumsScreen(
                                 modifier = Modifier
                                     .aspectRatio(1f)
                                     .fillMaxWidth()
-                                    .clip(MaterialTheme.shapes.medium),
+                                    .clip(MaterialTheme.shapes.medium)
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                                 contentScale = ContentScale.Crop
                             )
                             Text(

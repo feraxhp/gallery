@@ -258,8 +258,8 @@ private fun DetailImageItem(
                                     event.changes.forEach { it.consume() }
 
                                     val newScale = (currentScale * zoomChange).coerceIn(1f, 5f)
-                                    // Sensibilidad de paneo aumentada para que se sienta menos rígido
-                                    val panSensitivity = 1.5f
+                                    // El multiplicador escala con el zoom para que el paneo no se sienta lento en aumentos grandes
+                                    val panSensitivity = 1.2f * currentScale
                                     scope.launch {
                                         scale.snapTo(newScale)
                                         offsetX.snapTo(offsetX.value + panChange.x * panSensitivity)

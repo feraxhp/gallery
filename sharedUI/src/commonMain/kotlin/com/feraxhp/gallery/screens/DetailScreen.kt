@@ -228,152 +228,156 @@ private fun DetailImageItem(
 
     with(sharedTransitionScope) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer(
-                    scaleX = scale.value,
-                    scaleY = scale.value,
-                    translationX = offsetX.value,
-                    translationY = offsetY.value
-                )
-                .pointerInput(Unit) {
-                    awaitEachGesture {
-                        var isSwipingVertical = false
-                        var isZooming = false
-
-                        awaitFirstDown(requireUnconsumed = false)
-                        var accumulatedSwipeY = 0f
-                        do {
-                            val event = awaitPointerEvent()
-                            val zoomChange = event.calculateZoom()
-                            val panChange = event.calculatePan()
-
-                            val currentScale = scale.value
-                            if (currentScale > 1.01f || zoomChange != 1f || isZooming) {
-                                isZooming = true
-                                // Consumimos el gesto de transformación
-                                event.changes.forEach { it.consume() }
-
-                                val newScale = (currentScale * zoomChange).coerceIn(1f, 5f)
-                                scope.launch {
-                                    scale.snapTo(newScale)
-                                    offsetX.snapTo(offsetX.value + panChange.x)
-                                    offsetY.snapTo(offsetY.value + panChange.y)
-                                }
-                            } else {
-                                // Escala 1. Solo consumimos si es un swipe vertical claro.
-                                if (!isSwipingVertical && abs(panChange.y) > abs(panChange.x) && abs(panChange.y) > 2f) {
-                                    isSwipingVertical = true
-                                }
-
-                                if (isSwipingVertical) {
-                                    event.changes.forEach { it.consume() }
-                                    accumulatedSwipeY += panChange.y
-                                    scope.launch {
-                                        // Solo permitimos desplazamiento hacia abajo para el gesto de cierre
-                                        offsetY.snapTo((offsetY.value + panChange.y).coerceAtLeast(0f))
-                                    }
-                                }
-                            }
-                        } while (event.changes.any { it.pressed })
-
-                        // Al soltar, si estamos en escala 1 y hay offset vertical, animamos o cerramos
-                        if (scale.value <= 1.01f) {
-                            if (offsetY.value > 200f) {
-                                safeOnBack()
-                            } else if (accumulatedSwipeY < -150f) {
-                                onSwipeUp()
-                            } else {
-                                scope.launch {
-                                    offsetY.animateTo(0f)
-                                    offsetX.animateTo(0f)
-                                }
-                            }
-                        }
-                    }
-                }
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = {
-                            if (isVisible) {
-                                if (image.type == MediaType.VIDEO || image.isMotionPhoto) {
-                                    if (!videoActive) {
-                                        videoActive = true
-                                        isPlaying = true
-                                    } else {
-                                        isPlaying = !isPlaying
-                                    }
-                                } else if (scale.value <= 1.01f) {
-                                    safeOnBack()
-                                }
-                            }
-                        },
-                        onDoubleTap = {
-                            scope.launch {
-                                if (scale.value > 1.01f) {
-                                    launch { scale.animateTo(1f) }
-                                    launch { offsetX.animateTo(0f) }
-                                    launch { offsetY.animateTo(0f) }
-                                } else {
-                                    launch { scale.animateTo(3f) }
-                                    launch { offsetX.animateTo(0f) }
-                                    launch { offsetY.animateTo(0f) }
-                                }
-                            }
-                        }
-                    )
-                },
+            modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .then(
-                        if (showAspectRatio) {
-                            Modifier
-                                .wrapContentSize(Alignment.Center)
-                                .aspectRatio(image.aspectRatio)
-                        } else {
-                            Modifier
-                        }
+                    .graphicsLayer(
+                        scaleX = scale.value,
+                        scaleY = scale.value,
+                        translationX = offsetX.value,
+                        translationY = offsetY.value
                     )
-                    .clip(RoundedCornerShape(cornerRadius))
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            var isSwipingVertical = false
+                            var isZooming = false
+
+                            awaitFirstDown(requireUnconsumed = false)
+                            var accumulatedSwipeY = 0f
+                            do {
+                                val event = awaitPointerEvent()
+                                val zoomChange = event.calculateZoom()
+                                val panChange = event.calculatePan()
+
+                                val currentScale = scale.value
+                                if (currentScale > 1.01f || zoomChange != 1f || isZooming) {
+                                    isZooming = true
+                                    event.changes.forEach { it.consume() }
+
+                                    val newScale = (currentScale * zoomChange).coerceIn(1f, 5f)
+                                    // Sensibilidad de paneo aumentada para que se sienta menos rígido
+                                    val panSensitivity = 1.5f
+                                    scope.launch {
+                                        scale.snapTo(newScale)
+                                        offsetX.snapTo(offsetX.value + panChange.x * panSensitivity)
+                                        offsetY.snapTo(offsetY.value + panChange.y * panSensitivity)
+                                    }
+                                } else {
+                                    if (!isSwipingVertical && abs(panChange.y) > abs(panChange.x) && abs(panChange.y) > 2f) {
+                                        isSwipingVertical = true
+                                    }
+
+                                    if (isSwipingVertical) {
+                                        event.changes.forEach { it.consume() }
+                                        accumulatedSwipeY += panChange.y
+                                        scope.launch {
+                                            offsetY.snapTo((offsetY.value + panChange.y).coerceAtLeast(0f))
+                                        }
+                                    }
+                                }
+                            } while (event.changes.any { it.pressed })
+
+                            if (scale.value <= 1.01f) {
+                                if (offsetY.value > 200f) {
+                                    safeOnBack()
+                                } else if (accumulatedSwipeY < -150f) {
+                                    onSwipeUp()
+                                } else {
+                                    scope.launch {
+                                        offsetY.animateTo(0f)
+                                        offsetX.animateTo(0f)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = {
+                                if (isVisible) {
+                                    if (image.type == MediaType.VIDEO || image.isMotionPhoto) {
+                                        if (!videoActive) {
+                                            videoActive = true
+                                            isPlaying = true
+                                        } else {
+                                            isPlaying = !isPlaying
+                                        }
+                                    } else if (scale.value <= 1.01f) {
+                                        safeOnBack()
+                                    }
+                                }
+                            },
+                            onDoubleTap = {
+                                scope.launch {
+                                    if (scale.value > 1.01f) {
+                                        launch { scale.animateTo(1f) }
+                                        launch { offsetX.animateTo(0f) }
+                                        launch { offsetY.animateTo(0f) }
+                                    } else {
+                                        launch { scale.animateTo(3f) }
+                                        launch { offsetX.animateTo(0f) }
+                                        launch { offsetY.animateTo(0f) }
+                                    }
+                                }
+                            }
+                        )
+                    },
+                contentAlignment = Alignment.Center
             ) {
-                AsyncImage(
-                    model = model,
-                    contentDescription = image.name,
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .then(
-                            if (isSharedElement) {
-                                Modifier.sharedBounds(
-                                    sharedContentState = rememberSharedContentState(key = "image-${image.id}"),
-                                    animatedVisibilityScope = animatedVisibilityScope,
-                                    boundsTransform = { _, _ -> tween(500) },
-                                    resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
-                                    clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(cornerRadius))
-                                )
-                            } else Modifier
-                        ),
-                    contentScale = if (showAspectRatio) ContentScale.Crop else ContentScale.Fit
-                )
-
-                AnimatedVisibility(
-                    visible = videoActive && isVisible,
-                    enter = fadeIn(tween(300)),
-                    exit = fadeOut(tween(200))
+                            if (showAspectRatio) {
+                                Modifier
+                                    .wrapContentSize(Alignment.Center)
+                                    .aspectRatio(image.aspectRatio)
+                            } else {
+                                Modifier
+                            }
+                        )
+                        .clip(RoundedCornerShape(cornerRadius))
                 ) {
-                    VideoPlayer(
-                        uri = image.uri,
-                        isMotionPhoto = image.isMotionPhoto,
-                        isPlaying = isPlaying,
-                        modifier = Modifier.fillMaxSize(),
-                        onProgressUpdate = { currentTime = it },
-                        onVideoClick = { isPlaying = !isPlaying }
+                    AsyncImage(
+                        model = model,
+                        contentDescription = image.name,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .then(
+                                if (isSharedElement) {
+                                    Modifier.sharedBounds(
+                                        sharedContentState = rememberSharedContentState(key = "image-${image.id}"),
+                                        animatedVisibilityScope = animatedVisibilityScope,
+                                        boundsTransform = { _, _ -> tween(500) },
+                                        resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
+                                        clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(cornerRadius))
+                                    )
+                                } else Modifier
+                            ),
+                        contentScale = if (showAspectRatio) ContentScale.Crop else ContentScale.Fit
                     )
+
+                    AnimatedVisibility(
+                        visible = videoActive && isVisible,
+                        enter = fadeIn(tween(300)),
+                        exit = fadeOut(tween(200))
+                    ) {
+                        VideoPlayer(
+                            uri = image.uri,
+                            isMotionPhoto = image.isMotionPhoto,
+                            isPlaying = isPlaying,
+                            modifier = Modifier.fillMaxSize(),
+                            onProgressUpdate = { currentTime = it },
+                            onVideoClick = { isPlaying = !isPlaying }
+                        )
+                    }
                 }
             }
 
+            // Píldoras de UI - Posición fija por encima del objeto con zoom
             val isTransitionRunning = animatedVisibilityScope.transition.currentState != animatedVisibilityScope.transition.targetState
 
             AnimatedVisibility(
@@ -451,6 +455,7 @@ private fun DetailImageItem(
         }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

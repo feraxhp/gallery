@@ -257,7 +257,7 @@ private fun DetailImageItem(
                                     isZooming = true
                                     event.changes.forEach { it.consume() }
 
-                                    val newScale = (currentScale * zoomChange).coerceIn(1f, 5f)
+                                    val newScale = (currentScale * zoomChange).coerceIn(1f, 20f)
                                     // El multiplicador escala con el zoom para que el paneo no se sienta lento en aumentos grandes
                                     val panSensitivity = 1.2f * currentScale
                                     scope.launch {

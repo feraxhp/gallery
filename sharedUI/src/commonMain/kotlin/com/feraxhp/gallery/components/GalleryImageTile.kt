@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -19,6 +20,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.dp
+import androidx.graphics.shapes.RoundedPolygon
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import com.feraxhp.gallery.model.GalleryImage
@@ -27,8 +29,26 @@ import com.feraxhp.gallery.util.rememberVideoModel
 import com.feraxhp.gallery.util.toImageBitmap
 import gallery.sharedui.generated.resources.Res
 import gallery.sharedui.generated.resources.ic_cyclone
+import io.ktor.utils.io.bits.lowInt
 import org.jetbrains.compose.resources.painterResource
 
+val shapes = listOf(
+    MaterialShapes.Bun,
+    MaterialShapes.Square,
+    MaterialShapes.Diamond,
+    MaterialShapes.Arrow,
+    MaterialShapes.Oval,
+    MaterialShapes.Pill,
+    MaterialShapes.ClamShell,
+    MaterialShapes.Cookie4Sided,
+    MaterialShapes.Gem,
+    MaterialShapes.Ghostish,
+    MaterialShapes.Clover8Leaf,
+    MaterialShapes.Pentagon,
+)
+
+
+@Suppress("RememberReturnType")
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun GalleryImageTile(
@@ -71,10 +91,14 @@ fun GalleryImageTile(
                 .clickable { onImageClick(image, allImages) },
             contentAlignment = Alignment.Center
         ) {
-            // Añadimos el LoadingIndicator como fondo para que se vea la forma expresiva
-            LoadingIndicator(
-                modifier = Modifier.size(32.dp),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+            val index = remember { (image.id.toULong() % 12uL).toInt() }
+            Spacer (
+                modifier
+                    .size(32.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = shapes[index].toShape()
+                    )
             )
 
             AsyncImage(

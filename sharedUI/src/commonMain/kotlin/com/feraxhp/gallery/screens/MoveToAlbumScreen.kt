@@ -33,54 +33,59 @@ fun MoveToAlbumScreen(
         viewModel.loadAlbums()
     }
 
-    if (isLoading && albums.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            LoadingIndicator()
-        }
-    } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                top = 16.dp + topPadding,
-                end = 16.dp,
-                bottom = 16.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            items(albums, key = { it.id }) { album ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onAlbumSelected(album) }
-                        .padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val model = if (album.coverUri.contains("video", ignoreCase = true)) {
-                        rememberVideoModel(album.coverUri, null)
-                    } else {
-                        album.coverUri
-                    }
-                    AsyncImage(
-                        model = model,
-                        contentDescription = album.name,
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.surface
+    ) {
+        if (isLoading && albums.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                LoadingIndicator()
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    top = 16.dp + topPadding,
+                    end = 16.dp,
+                    bottom = 16.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(albums, key = { it.id }) { album ->
+                    Row(
                         modifier = Modifier
-                            .size(64.dp)
-                            .clip(MaterialTheme.shapes.small),
-                        contentScale = ContentScale.Crop
-                    )
-                    Column(
-                        modifier = Modifier.padding(start = 16.dp)
+                            .fillMaxWidth()
+                            .clickable { onAlbumSelected(album) }
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = album.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold
+                        val model = if (album.coverUri.contains("video", ignoreCase = true)) {
+                            rememberVideoModel(album.coverUri, null)
+                        } else {
+                            album.coverUri
+                        }
+                        AsyncImage(
+                            model = model,
+                            contentDescription = album.name,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(MaterialTheme.shapes.small),
+                            contentScale = ContentScale.Crop
                         )
-                        Text(
-                            text = "${album.imageCount} elementos",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Column(
+                            modifier = Modifier.padding(start = 16.dp)
+                        ) {
+                            Text(
+                                text = album.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "${album.imageCount} elementos",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                     }
                 }
             }

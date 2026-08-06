@@ -29,6 +29,7 @@ fun PermissionsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
             .verticalScroll(rememberScrollState())
             .padding(24.dp)
             .padding(top = topPadding),

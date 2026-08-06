@@ -30,6 +30,9 @@ class GalleryViewModel(private val repository: ImageRepository) : ViewModel() {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
     private val _deletedImageId = MutableStateFlow<Long?>(null)
     val deletedImageId: StateFlow<Long?> = _deletedImageId.asStateFlow()
 
@@ -78,6 +81,39 @@ class GalleryViewModel(private val repository: ImageRepository) : ViewModel() {
                 // Manejar error
             } finally {
                 _isLoading.value = false
+            }
+        }
+    }
+
+    fun refreshGallery(albumId: String? = null) {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            try {
+                repository.refreshMedia()
+                val result = if (albumId == null) {
+                    repository.getImages()
+                } else {
+                    repository.getImagesByAlbum(albumId)
+                }
+                _images.value = result
+            } catch (e: Exception) {
+                logger.e(e) { "Error refreshing gallery" }
+            } finally {
+                _isRefreshing.value = false
+            }
+        }
+    }
+
+    fun refreshAlbums() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            try {
+                repository.refreshMedia()
+                _albums.value = repository.getAlbums()
+            } catch (e: Exception) {
+                logger.e(e) { "Error refreshing albums" }
+            } finally {
+                _isRefreshing.value = false
             }
         }
     }

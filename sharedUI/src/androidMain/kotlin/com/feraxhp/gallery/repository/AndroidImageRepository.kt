@@ -4,6 +4,7 @@ import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -519,6 +520,35 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
         // Similar a copyImage pero al álbum específico
         // Implementación simplificada
         copyImage(image) // Por ahora solo duplica
+    }
+
+    override suspend fun refreshMedia() = withContext(Dispatchers.IO) {
+        val rootPaths = listOf(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+        )
+        
+        val filesToScan = mutableListOf<String>()
+        rootPaths.forEach { root ->
+            if (root.exists()) {
+                root.walkTopDown().filter { 
+                    it.isFile && (it.extension.lowercase() in listOf("jpg", "jpeg", "png", "webp", "mp4", "mkv", "mov")) 
+                }
+                .take(500)
+                .forEach { filesToScan.add(it.absolutePath) }
+            }
+        }
+
+        if (filesToScan.isNotEmpty()) {
+            suspendCoroutine<Unit> { continuation ->
+                MediaScannerConnection.scanFile(
+                    context,
+                    filesToScan.toTypedArray(),
+                    null
+                ) { _, _ -> }
+                continuation.resume(Unit)
+            }
+        }
     }
 }
 

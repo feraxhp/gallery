@@ -710,6 +710,7 @@ fun AppPreview() {
         override suspend fun copyImage(image: com.feraxhp.gallery.model.GalleryImage): Boolean = true
         override fun openInFileManager(path: String) {}
         override fun shareImage(image: com.feraxhp.gallery.model.GalleryImage) {}
+        override suspend fun refreshMedia() {}
     }
     App(
         repository = mockRepository,

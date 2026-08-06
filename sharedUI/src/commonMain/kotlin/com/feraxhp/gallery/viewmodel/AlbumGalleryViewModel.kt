@@ -5,20 +5,16 @@ import androidx.lifecycle.viewModelScope
 import co.touchlab.kermit.Logger
 import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.repository.ImageRepository
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
-class GalleryViewModel(private val repository: ImageRepository) : ViewModel(), GalleryActionHandler {
+class AlbumGalleryViewModel(private val repository: ImageRepository) : ViewModel(), GalleryActionHandler {
 
-    private val logger = Logger.withTag("GalleryViewModel")
+    private val logger = Logger.withTag("AlbumGalleryViewModel")
+    
     private val _images = MutableStateFlow<List<GalleryImage>>(emptyList())
     private val _hiddenImageIds = MutableStateFlow<Set<Long>>(emptySet())
-
+    
     val images: StateFlow<List<GalleryImage>> = combine(_images, _hiddenImageIds) { images, hiddenIds ->
         images.filter { it.id !in hiddenIds }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -48,31 +44,31 @@ class GalleryViewModel(private val repository: ImageRepository) : ViewModel(), G
         _deletedImageId.value = null
     }
 
-    fun loadImages() {
-        logger.d { "loadImages called" }
+    fun loadImages(albumId: String) {
+        logger.d { "loadImages called with albumId: $albumId" }
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val result = repository.getImages()
-                logger.d { "Loaded ${result.size} images" }
+                val result = repository.getImagesByAlbum(albumId)
+                logger.d { "Loaded ${result.size} images for album $albumId" }
                 _images.value = result
             } catch (e: Exception) {
-                logger.e(e) { "Error loading images" }
+                logger.e(e) { "Error loading album images" }
             } finally {
                 _isLoading.value = false
             }
         }
     }
 
-    fun refreshGallery() {
+    fun refreshGallery(albumId: String) {
         viewModelScope.launch {
             _isRefreshing.value = true
             try {
                 repository.refreshMedia()
-                val result = repository.getImages()
+                val result = repository.getImagesByAlbum(albumId)
                 _images.value = result
             } catch (e: Exception) {
-                logger.e(e) { "Error refreshing gallery" }
+                logger.e(e) { "Error refreshing album gallery" }
             } finally {
                 _isRefreshing.value = false
             }

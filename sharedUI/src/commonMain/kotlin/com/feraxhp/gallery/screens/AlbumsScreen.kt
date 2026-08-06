@@ -27,7 +27,7 @@ import coil3.compose.AsyncImage
 import com.feraxhp.gallery.model.Album
 import com.feraxhp.gallery.repository.ImageRepository
 import com.feraxhp.gallery.util.rememberVideoModel
-import com.feraxhp.gallery.viewmodel.GalleryViewModel
+import com.feraxhp.gallery.viewmodel.AlbumsViewModel
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -38,7 +38,7 @@ fun AlbumsScreen(
     onAlbumClick: (Album) -> Unit,
     topPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
-    val viewModel: GalleryViewModel = viewModel { GalleryViewModel(repository) }
+    val viewModel: AlbumsViewModel = viewModel { AlbumsViewModel(repository) }
     val albums by viewModel.albums.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()

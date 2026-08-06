@@ -113,12 +113,15 @@ import com.feraxhp.gallery.components.NavigationItem
 import com.feraxhp.gallery.navigation.Destination
 import com.feraxhp.gallery.repository.ImageRepository
 import com.feraxhp.gallery.screens.AlbumsScreen
+import com.feraxhp.gallery.screens.AlbumGalleryScreen
 import com.feraxhp.gallery.screens.DetailScreen
 import com.feraxhp.gallery.screens.GalleryScreen
 import com.feraxhp.gallery.screens.MoveToAlbumScreen
 import com.feraxhp.gallery.screens.PermissionsScreen
 import com.feraxhp.gallery.util.SetSystemBarsColor
 import com.feraxhp.gallery.viewmodel.GalleryViewModel
+import com.feraxhp.gallery.viewmodel.AlbumGalleryViewModel
+import com.feraxhp.gallery.viewmodel.GalleryActionHandler
 import com.feraxhp.ktheme.DynamicTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -140,7 +143,6 @@ fun App(
     onRequestWritePermission: () -> Unit
 ) {
     val isSystemDark = isSystemInDarkTheme()
-    val galleryViewModel: GalleryViewModel = viewModel { GalleryViewModel(repository) }
     var backStack by remember {
         mutableStateOf(
             listOf<Destination>(
@@ -151,6 +153,8 @@ fun App(
 
     val currentReadPermission by rememberUpdatedState(hasReadPermission)
     val currentWritePermission by rememberUpdatedState(hasWritePermission)
+
+    var activeActionHandler by remember { mutableStateOf<GalleryActionHandler?>(null) }
 
     LaunchedEffect(hasReadPermission, hasWritePermission) {
         if (hasReadPermission && hasWritePermission && backStack.lastOrNull() == Destination.Permissions) {
@@ -192,12 +196,12 @@ fun App(
                         }
 
                         // Activamos la animación de shatter
-                        galleryViewModel.markAsDeleted(imageToDelete.id)
+                        activeActionHandler?.markAsDeleted(imageToDelete.id)
                         
                         // Esperamos unos 300ms para que la animación capture los datos necesarios 
                         // antes de ocultar la imagen del grid
                         delay(400.milliseconds)
-                        galleryViewModel.hideImage(imageToDelete.id)
+                        activeActionHandler?.hideImage(imageToDelete.id)
                         
                         val result = snackbarHostState.showSnackbar(
                             message = "Imagen eliminada",
@@ -207,7 +211,7 @@ fun App(
                         
                         if (result == SnackbarResult.ActionPerformed) {
                             // Si se pulsa Undo, volvemos a mostrarla y navegamos al detalle
-                            galleryViewModel.restoreImage(imageToDelete.id)
+                            activeActionHandler?.restoreImage(imageToDelete.id)
                             backStack = currentBackstack
                         } else {
                             // Si no se pulsa, borramos definitivamente
@@ -530,8 +534,10 @@ fun App(
                                     LaunchedEffect(Unit) { isDetailActive = false }
                                     val animatedVisibilityScope =
                                         LocalNavAnimatedContentScope.current
+                                    val viewModel: GalleryViewModel = viewModel { GalleryViewModel(repository) }
+                                    LaunchedEffect(viewModel) { activeActionHandler = viewModel }
                                     GalleryScreen(
-                                        viewModel = galleryViewModel,
+                                        viewModel = viewModel,
                                         onImageClick = { image, allImages ->
                                             backStack =
                                                 backStack + Destination.Detail(image, allImages)
@@ -564,8 +570,10 @@ fun App(
                                     LaunchedEffect(Unit) { isDetailActive = false }
                                     val animatedVisibilityScope =
                                         LocalNavAnimatedContentScope.current
-                                    GalleryScreen(
-                                        viewModel = galleryViewModel,
+                                    val viewModel: AlbumGalleryViewModel = viewModel(key = key.albumId) { AlbumGalleryViewModel(repository) }
+                                    LaunchedEffect(viewModel) { activeActionHandler = viewModel }
+                                    AlbumGalleryScreen(
+                                        viewModel = viewModel,
                                         albumId = key.albumId,
                                         onImageClick = { image, allImages ->
                                             backStack =

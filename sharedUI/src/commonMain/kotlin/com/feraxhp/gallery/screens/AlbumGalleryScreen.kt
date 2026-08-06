@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
@@ -20,32 +22,29 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.zIndex
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
+import com.feraxhp.gallery.viewmodel.AlbumGalleryViewModel
 import com.feraxhp.gallery.components.ShatterEffect
 import com.feraxhp.gallery.model.GalleryImage
-import com.feraxhp.gallery.model.ShatterData
 import com.feraxhp.gallery.model.MediaType
+import com.feraxhp.gallery.model.ShatterData
 import com.feraxhp.gallery.repository.ImageRepository
 import com.feraxhp.gallery.util.rememberVideoModel
 import com.feraxhp.gallery.util.toImageBitmap
-import com.feraxhp.gallery.viewmodel.GalleryViewModel
 import gallery.sharedui.generated.resources.Res
 import gallery.sharedui.generated.resources.ic_cyclone
-import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
@@ -53,29 +52,24 @@ import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.painterResource
 import kotlin.time.Duration.Companion.milliseconds
 
-
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun GalleryScreen(
-    viewModel: GalleryViewModel,
+fun AlbumGalleryScreen(
+    viewModel: AlbumGalleryViewModel,
+    albumId: String,
     onImageClick: (GalleryImage, List<GalleryImage>) -> Unit,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
-    topPadding: androidx.compose.ui.unit.Dp = 0.dp
+    topPadding: Dp = 0.dp
 ) {
     val images by viewModel.images.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     val deletedImageId by viewModel.deletedImageId.collectAsState()
     
-    // Offset de la propia galería respecto al root para corregir el posicionamiento de la animación
     var galleryOffset by remember { mutableStateOf(Offset.Zero) }
-
-    // Para rastrear posiciones y bitmaps de las imágenes
     val imageBounds = remember { mutableStateMapOf<Long, androidx.compose.ui.geometry.Rect>() }
     val imageBitmaps = remember { mutableStateMapOf<Long, ImageBitmap>() }
-    
-    // Estado para la animación activa
     var activeShatterEffect by remember { mutableStateOf<ShatterData?>(null) }
     
     val pullToRefreshState = rememberPullToRefreshState()
@@ -87,11 +81,10 @@ fun GalleryScreen(
             val bitmap = imageBitmaps[id]
             
             if (bounds != null && bitmap != null) {
-                // Esperar a que la transición sea visible (comienza antes de que termine del todo)
                 snapshotFlow { animatedVisibilityScope.transition.targetState == EnterExitState.Visible }
                     .first { it }
 
-                delay(390.milliseconds) // Retraso de 50ms para sincronizar mejor
+                delay(390.milliseconds)
                 
                 activeShatterEffect = ShatterData(
                     bitmap = bitmap,
@@ -99,7 +92,6 @@ fun GalleryScreen(
                     size = androidx.compose.ui.unit.IntSize(bounds.width.toInt(), bounds.height.toInt())
                 )
             }
-            // Limpiamos el estado en el ViewModel para que no se repita
             viewModel.clearDeletedState()
         }
     }
@@ -120,9 +112,9 @@ fun GalleryScreen(
         }
     }
 
-    LaunchedEffect(animatedVisibilityScope.transition.targetState) {
+    LaunchedEffect(albumId, animatedVisibilityScope.transition.targetState) {
         if (animatedVisibilityScope.transition.targetState == EnterExitState.Visible) {
-            viewModel.loadImages()
+            viewModel.loadImages(albumId)
         }
     }
 
@@ -148,7 +140,7 @@ fun GalleryScreen(
             ) {
                 PullToRefreshBox(
                     isRefreshing = isRefreshing,
-                    onRefresh = { viewModel.refreshGallery() },
+                    onRefresh = { viewModel.refreshGallery(albumId) },
                     modifier = Modifier.fillMaxSize(),
                     state = pullToRefreshState,
                     indicator = {
@@ -166,6 +158,14 @@ fun GalleryScreen(
                         columns = GridCells.Fixed(3),
                         modifier = Modifier
                             .fillMaxSize()
+                            .sharedBounds(
+                                sharedContentState = rememberSharedContentState(key = "album-$albumId"),
+                                animatedVisibilityScope = animatedVisibilityScope,
+                                boundsTransform = { _, _ -> tween(500) },
+                                clipInOverlayDuringTransition = OverlayClip(
+                                    RoundedCornerShape(cornerRadius)
+                                )
+                            )
                             .clip(RoundedCornerShape(cornerRadius)),
                         contentPadding = PaddingValues(
                             start = 4.dp,
@@ -295,28 +295,27 @@ fun GalleryScreen(
                     }
                 }
                 
-            // El ShatterEffect se dibuja encima de todo en un Box de pantalla completa
-            Box(Modifier.fillMaxSize()) {
-                activeShatterEffect?.let { data ->
-                    val density = androidx.compose.ui.platform.LocalDensity.current
-                    ShatterEffect(
-                        bitmap = data.bitmap,
-                        modifier = Modifier
-                            .offset(
-                                x = with(density) { data.offset.x.toDp() },
-                                y = with(density) { data.offset.y.toDp() }
-                            )
-                            .size(
-                                width = with(density) { data.size.width.toDp() },
-                                height = with(density) { data.size.height.toDp() }
-                            ),
-                        onAnimationEnd = {
-                            activeShatterEffect = null
-                        }
-                    )
+                Box(Modifier.fillMaxSize()) {
+                    activeShatterEffect?.let { data ->
+                        val density = androidx.compose.ui.platform.LocalDensity.current
+                        ShatterEffect(
+                            bitmap = data.bitmap,
+                            modifier = Modifier
+                                .offset(
+                                    x = with(density) { data.offset.x.toDp() },
+                                    y = with(density) { data.offset.y.toDp() }
+                                )
+                                .size(
+                                    width = with(density) { data.size.width.toDp() },
+                                    height = with(density) { data.size.height.toDp() }
+                                ),
+                            onAnimationEnd = {
+                                activeShatterEffect = null
+                            }
+                        )
+                    }
                 }
             }
         }
     }
-}
 }

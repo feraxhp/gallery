@@ -118,16 +118,27 @@ fun AlbumsScreen(
                             } else {
                                 album.coverUri
                             }
-                            AsyncImage(
-                                model = model,
-                                contentDescription = album.name,
+                            Box(
                                 modifier = Modifier
                                     .aspectRatio(1f)
                                     .fillMaxWidth()
-                                    .clip(MaterialTheme.shapes.medium)
+                                    .clip(MaterialTheme.shapes.extraLarge)
                                     .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                                contentScale = ContentScale.Crop
-                            )
+                                contentAlignment = Alignment.Center
+                            ) {
+                                LoadingIndicator(
+                                    modifier = Modifier.size(48.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                                )
+                                AsyncImage(
+                                    model = model,
+                                    contentDescription = album.name,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(MaterialTheme.shapes.extraLarge),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
                             Text(
                                 text = album.name,
                                 style = MaterialTheme.typography.bodyLarge,

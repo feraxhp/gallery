@@ -132,12 +132,25 @@ fun GalleryScreen(
     }
 
     if (isLoading && images.isEmpty()) {
-        Box(Modifier.fillMaxSize().onGloballyPositioned { galleryOffset = it.positionInRoot() }, contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(cornerRadius))
+                .background(MaterialTheme.colorScheme.surface)
+                .onGloballyPositioned { galleryOffset = it.positionInRoot() },
+            contentAlignment = Alignment.Center
+        ) {
             LoadingIndicator()
         }
     } else {
         with(sharedTransitionScope) {
-            Box(Modifier.fillMaxSize().onGloballyPositioned { galleryOffset = it.positionInRoot() }) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(cornerRadius))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .onGloballyPositioned { galleryOffset = it.positionInRoot() }
+            ) {
                 PullToRefreshBox(
                     isRefreshing = isRefreshing,
                     onRefresh = { viewModel.refreshGallery(albumId) },

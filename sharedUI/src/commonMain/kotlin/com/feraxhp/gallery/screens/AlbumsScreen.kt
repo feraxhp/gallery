@@ -1,12 +1,15 @@
 package com.feraxhp.gallery.screens
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
@@ -48,15 +51,32 @@ fun AlbumsScreen(
         }
     }
 
+    val isTransitionRunning = animatedVisibilityScope.transition.currentState != animatedVisibilityScope.transition.targetState
+    val isTargetVisible = animatedVisibilityScope.transition.targetState == EnterExitState.Visible
+
+    val cornerRadius by animateDpAsState(
+        targetValue = if (isTargetVisible && !isTransitionRunning) 0.dp else 16.dp,
+        label = "cornerRadius"
+    )
+
     if (isLoading && albums.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(cornerRadius))
+                .background(MaterialTheme.colorScheme.surface),
+            contentAlignment = Alignment.Center
+        ) {
             LoadingIndicator()
         }
     } else {
         PullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = { viewModel.refreshAlbums() },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(cornerRadius))
+                .background(MaterialTheme.colorScheme.surface),
             state = pullToRefreshState,
             indicator = {
                 PullToRefreshDefaults.LoadingIndicator(

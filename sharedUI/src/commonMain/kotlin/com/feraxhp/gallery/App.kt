@@ -23,6 +23,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
@@ -105,6 +106,8 @@ import androidx.navigation3.runtime.metadata
 import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import androidx.navigation3.ui.NavDisplay
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.media3.common.util.Log
+import androidx.media3.common.util.UnstableApi
 import co.touchlab.kermit.Logger
 import com.feraxhp.gallery.components.NavigationItem
 import com.feraxhp.gallery.navigation.Destination
@@ -122,6 +125,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @OptIn(
     ExperimentalMaterial3Api::class,
     ExperimentalMaterial3Api::class,
@@ -466,7 +470,7 @@ fun App(
                 }
                 SharedTransitionLayout {
                     NavDisplay(
-                        modifier = Modifier,
+                        modifier = Modifier.background(Color.Black),
                         backStack = backStack,
                         sharedTransitionScope = this,
                         onBack = {
@@ -474,19 +478,42 @@ fun App(
                                 backStack = backStack.dropLast(1)
                             }
                         },
+                        popTransitionSpec = {
+//                            val initial = initialState.key
+//                            val target = targetState.key
+
+                            val duration = 600
+                            fadeIn(tween(duration)) togetherWith fadeOut(tween(duration))
+                        },
+                        predictivePopTransitionSpec = {
+                            val initial = initialState.key
+                            val target = targetState.key
+                            val isAlbumToGallery = initial == "Albums" && target == "Gallery"
+                            // val isAlbumGalleryToAlbum = (initial as String).startsWith("AlbumGallery") && target == "Albums"
+
+                            // Log.d("prediction", "transition: $initial -> $target")
+                            // Log.d("prediction", "AG: $isAlbumToGallery")
+                            // Log.d("prediction", "AgG: $isAlbumGalleryToAlbum")
+
+                            val scale = if (isAlbumToGallery) 0.8f else 1.0f
+                            val tagetAlpha = if (isAlbumToGallery) 0.8f else .0f
+                            val duration = 5
+
+                            fadeIn(tween(duration)) togetherWith
+                                    fadeOut(tween(duration), targetAlpha = tagetAlpha) +
+                                    scaleOut(targetScale = scale, animationSpec = tween(duration))
+                        },
+                        transitionSpec = {
+//                            val initial = initialState.key
+//                            val target = targetState.key
+//
+//                            Log.d("prediction", "transition: $initial -> $target")
+                            val duration = 600
+                            fadeIn(tween(duration)) togetherWith fadeOut(tween(duration))
+                        },
                         entryProvider = { key: Destination ->
                             when (key) {
-                                Destination.Permissions -> NavEntry(
-                                    key,
-                                    metadata = metadata {
-                                        put(NavDisplay.TransitionKey) {
-                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
-                                        }
-                                        put(NavDisplay.PopTransitionKey) {
-                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
-                                        }
-                                    }
-                                ) {
+                                Destination.Permissions -> NavEntry(key) {
                                     PermissionsScreen(
                                         hasReadPermission = currentReadPermission,
                                         hasWritePermission = currentWritePermission,
@@ -499,17 +526,7 @@ fun App(
                                     )
                                 }
 
-                                Destination.Gallery -> NavEntry(
-                                    key,
-                                    metadata = metadata {
-                                        put(NavDisplay.TransitionKey) {
-                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
-                                        }
-                                        put(NavDisplay.PopTransitionKey) {
-                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
-                                        }
-                                    }
-                                ) {
+                                Destination.Gallery -> NavEntry(key) {
                                     LaunchedEffect(Unit) { isDetailActive = false }
                                     val animatedVisibilityScope =
                                         LocalNavAnimatedContentScope.current
@@ -525,17 +542,7 @@ fun App(
                                     )
                                 }
 
-                                Destination.Albums -> NavEntry(
-                                    key,
-                                    metadata = metadata {
-                                        put(NavDisplay.TransitionKey) {
-                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
-                                        }
-                                        put(NavDisplay.PopTransitionKey) {
-                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
-                                        }
-                                    }
-                                ) {
+                                Destination.Albums -> NavEntry(key) {
                                     LaunchedEffect(Unit) { isDetailActive = false }
                                     val animatedVisibilityScope =
                                         LocalNavAnimatedContentScope.current
@@ -553,17 +560,7 @@ fun App(
                                     )
                                 }
 
-                                is Destination.AlbumGallery -> NavEntry(
-                                    key,
-                                    metadata = metadata {
-                                        put(NavDisplay.TransitionKey) {
-                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
-                                        }
-                                        put(NavDisplay.PopTransitionKey) {
-                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
-                                        }
-                                    }
-                                ) {
+                                is Destination.AlbumGallery -> NavEntry(key) {
                                     LaunchedEffect(Unit) { isDetailActive = false }
                                     val animatedVisibilityScope =
                                         LocalNavAnimatedContentScope.current
@@ -615,17 +612,7 @@ fun App(
                                     )
                                 }
 
-                                is Destination.MoveToAlbum -> NavEntry(
-                                    key,
-                                    metadata = metadata {
-                                        put(NavDisplay.TransitionKey) {
-                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
-                                        }
-                                        put(NavDisplay.PopTransitionKey) {
-                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
-                                        }
-                                    }
-                                ) {
+                                is Destination.MoveToAlbum -> NavEntry(key) {
                                     MoveToAlbumScreen(
                                         repository = repository,
                                         topPadding = topPadding,

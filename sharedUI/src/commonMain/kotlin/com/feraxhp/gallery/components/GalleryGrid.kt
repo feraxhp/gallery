@@ -61,6 +61,7 @@ fun GalleryGrid(
     selectedImageIds: Set<Long>,
     isSelectionMode: Boolean,
     deletedImageIds: Set<Long>,
+    isDeletedFromDetail: Boolean,
     onClearDeletedState: () -> Unit,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
@@ -116,10 +117,18 @@ fun GalleryGrid(
             imagesToGather = gatherMap
 
             if (imagesToGather.isNotEmpty()) {
-                // Esperamos a que la transición se inicie (targetState sea Visible)
-                // Usamos targetState para que empiece de inmediato y sincronice con el delay de App.kt
-                snapshotFlow { animatedVisibilityScope.transition.targetState == EnterExitState.Visible }
-                    .first { it }
+                // Ajustamos el tiempo de espera según el origen del borrado
+                if (isDeletedFromDetail) {
+                    // Si venimos de detail, esperamos a que la transición termine del todo
+                    snapshotFlow { animatedVisibilityScope.transition.currentState == EnterExitState.Visible }
+                        .first { it }
+                    // Margen extra para estabilidad de coordenadas
+//                    delay(50.milliseconds)
+                } else {
+                    // Si es desde el grid, podemos empezar casi de inmediato (targetState)
+                    snapshotFlow { animatedVisibilityScope.transition.targetState == EnterExitState.Visible }
+                        .first { it }
+                }
 
                 // Deducimos la duración basándonos en la distancia máxima para mantener una velocidad constante
                 val targetData = gatherMap[targetId]
@@ -146,8 +155,11 @@ fun GalleryGrid(
                     )
                 }
 
-                // Solapamos el inicio del ShatterEffect antes de que termine la reunión (al 85% del trayecto)
-                delay((calculatedDuration * 0.85f).toInt().milliseconds)
+                // Solapamos el inicio del ShatterEffect justo antes de que termine la reunión
+                // Si es desde detail, queremos que sea muy preciso (98%)
+                // Si es desde grid, puede solaparse un poco más (90%) para que sea fluido
+                val overlapFactor = if (isDeletedFromDetail) .01f else 0.80f
+                delay((calculatedDuration * overlapFactor).toInt().milliseconds)
 
                 // Disparamos el efecto shatter solo para la primera
                 if (targetData != null) {

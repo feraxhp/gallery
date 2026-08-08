@@ -210,7 +210,7 @@ fun App(
                         val handler = activeActionHandler
                         
                         // Activamos la animación de shatter para todas
-                        handler?.markAsDeleted(imagesToDelete.map { it.id }.toSet())
+                        handler?.markAsDeleted(imagesToDelete.map { it.id }.toSet(), fromDetail = isDetailActive)
                         
                         // Esperamos unos 400ms para que la animación capture los datos necesarios 
                         delay(400.milliseconds)

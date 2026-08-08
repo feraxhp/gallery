@@ -40,7 +40,11 @@ class GalleryViewModel(private val repository: ImageRepository) : ViewModel(), G
     private val _deletedImageIds = MutableStateFlow<Set<Long>>(emptySet())
     override val deletedImageIds: StateFlow<Set<Long>> = _deletedImageIds.asStateFlow()
 
-    override fun markAsDeleted(imageIds: Set<Long>) {
+    private val _isDeletedFromDetail = MutableStateFlow(false)
+    override val isDeletedFromDetail: StateFlow<Boolean> = _isDeletedFromDetail.asStateFlow()
+
+    override fun markAsDeleted(imageIds: Set<Long>, fromDetail: Boolean) {
+        _isDeletedFromDetail.value = fromDetail
         _deletedImageIds.value = imageIds
     }
 
@@ -54,6 +58,7 @@ class GalleryViewModel(private val repository: ImageRepository) : ViewModel(), G
 
     override fun clearDeletedState() {
         _deletedImageIds.value = emptySet()
+        _isDeletedFromDetail.value = false
     }
 
     fun toggleSelection(imageId: Long) {

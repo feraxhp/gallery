@@ -69,6 +69,7 @@ fun GalleryScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     val deletedImageIds by viewModel.deletedImageIds.collectAsState()
+    val isDeletedFromDetail by viewModel.isDeletedFromDetail.collectAsState()
     val selectedImageIds by viewModel.selectedImageIds.collectAsState()
     val isSelectionMode by viewModel.isSelectionMode.collectAsState()
     
@@ -101,6 +102,7 @@ fun GalleryScreen(
         selectedImageIds = selectedImageIds,
         isSelectionMode = isSelectionMode,
         deletedImageIds = deletedImageIds,
+        isDeletedFromDetail = isDeletedFromDetail,
         onClearDeletedState = { viewModel.clearDeletedState() },
         sharedTransitionScope = sharedTransitionScope,
         animatedVisibilityScope = animatedVisibilityScope,

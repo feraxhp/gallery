@@ -1,6 +1,8 @@
 package com.feraxhp.gallery.components
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -14,6 +16,7 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
@@ -21,6 +24,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -77,6 +81,11 @@ fun GalleryGrid(
     val haptic = LocalHapticFeedback.current
     var dragSelectionState by remember { mutableStateOf<DragSelectionInfo?>(null) }
     
+    // Estado para la animación de reunión (Gathering)
+    val gatheringProgress = remember { Animatable(0f) }
+    var gatheringTargetId by remember { mutableStateOf<Long?>(null) }
+    var imagesToGather by remember { mutableStateOf<Map<Long, ShatterData>>(emptyMap()) }
+
     // Usamos rememberUpdatedState para evitar reiniciar el pointerInput cuando cambian las funciones o estados
     val currentImages by rememberUpdatedState(images)
     val currentOnSetSelection by rememberUpdatedState(onSetSelection)
@@ -84,33 +93,64 @@ fun GalleryGrid(
     
     LaunchedEffect(deletedImageIds) {
         if (deletedImageIds.isNotEmpty()) {
-            val newShatters = mutableMapOf<Long, ShatterData>()
+            val targetId = currentImages.find { it.id in deletedImageIds }?.id
+            if (targetId == null) {
+                onClearDeletedState()
+                return@LaunchedEffect
+            }
             
-            // Solo lanzamos la animación para la primera imagen en el grid que esté en el set de borradas
-            val firstIdToAnimate = currentImages.find { it.id in deletedImageIds }?.id
-            
-            if (firstIdToAnimate != null) {
-                val bounds = imageBounds[firstIdToAnimate]
-                val bitmap = imageBitmaps[firstIdToAnimate]
+            gatheringTargetId = targetId
+            val gatherMap = mutableMapOf<Long, ShatterData>()
+            deletedImageIds.forEach { id ->
+                val bounds = imageBounds[id]
+                val bitmap = imageBitmaps[id]
                 if (bounds != null && bitmap != null) {
-                    newShatters[firstIdToAnimate] = ShatterData(
+                    gatherMap[id] = ShatterData(
                         bitmap = bitmap,
                         offset = IntOffset(bounds.left.toInt(), bounds.top.toInt()),
                         size = IntSize(bounds.width.toInt(), bounds.height.toInt())
                     )
                 }
             }
+            imagesToGather = gatherMap
 
-            if (newShatters.isNotEmpty()) {
-                // Esperar a que la transición sea visible (comienza antes de que termine del todo)
+            if (imagesToGather.isNotEmpty()) {
+                // Esperamos a que la transición se inicie (targetState sea Visible)
+                // Usamos targetState para que empiece de inmediato y sincronice con el delay de App.kt
                 snapshotFlow { animatedVisibilityScope.transition.targetState == EnterExitState.Visible }
                     .first { it }
 
-                delay(390.milliseconds) // Retraso para sincronizar mejor
+                // Deducimos la duración basándonos en la distancia máxima para mantener una velocidad constante
+                val targetData = gatherMap[targetId]
+                val maxDistance = if (targetData != null) {
+                    gatherMap.values.maxOfOrNull {
+                        val dx = (it.offset.x - targetData.offset.x).toFloat()
+                        val dy = (it.offset.y - targetData.offset.y).toFloat()
+                        kotlin.math.sqrt(dx * dx + dy * dy)
+                    } ?: 0f
+                } else 0f
                 
-                activeShatterEffects = activeShatterEffects + newShatters
+                // Calculamos duración: ~400ms para una distancia media (~600px)
+                // Velocidad = 1500 px/s. Limitamos el rango para no romper el delay de App.kt
+                val calculatedDuration = ((maxDistance / 1500f) * 1000).toInt().coerceIn(300, 450)
+
+                // Animación de reunir todas las imágenes
+                gatheringProgress.snapTo(0f)
+                gatheringProgress.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = calculatedDuration, easing = FastOutSlowInEasing)
+                )
+
+                // Una vez reunidas, disparamos el efecto shatter solo para la primera
+                if (targetData != null) {
+                    activeShatterEffects = activeShatterEffects + (targetId to targetData)
+                }
+                
+                // Limpiar estado de reunión
+                imagesToGather = emptyMap()
+                gatheringProgress.snapTo(0f)
             }
-            // Limpiamos el estado en el ViewModel para que no se repita
+            
             onClearDeletedState()
         }
     }
@@ -228,6 +268,7 @@ fun GalleryGrid(
                             )
                         }
                         items(imagesInDate, key = { it.id }) { image ->
+                            val isGathering = image.id in imagesToGather
                             GalleryImageTile(
                                 image = image,
                                 allImages = images,
@@ -243,25 +284,69 @@ fun GalleryGrid(
                                 },
                                 sharedTransitionScope = sharedTransitionScope,
                                 animatedVisibilityScope = animatedVisibilityScope,
-                                modifier = Modifier.animateItem()
+                                modifier = Modifier
+                                    .animateItem()
+                                    .alpha(if (isGathering) 0f else 1f)
                             )
                         }
                     }
                 }
             }
             
-            // El ShatterEffect se dibuja encima de todo en un Box de pantalla completa
+            // Capa de efectos visuales (Reunión y Shatter)
             Box(Modifier.fillMaxSize()) {
+                // 1. Animación de reunión (Gathering)
+                if (gatheringProgress.value > 0f) {
+                    val targetData = imagesToGather[gatheringTargetId]
+                    if (targetData != null) {
+                        val density = androidx.compose.ui.platform.LocalDensity.current
+                        imagesToGather.forEach { (id, data) ->
+                            val isTarget = id == gatheringTargetId
+                            val progress = gatheringProgress.value
+                            
+                            // Posición relativa e interpolada
+                            val currentX = (data.offset.x - galleryOffset.x) + 
+                                ((targetData.offset.x - data.offset.x) * progress)
+                            val currentY = (data.offset.y - galleryOffset.y) + 
+                                ((targetData.offset.y - data.offset.y) * progress)
+                            
+                            val scale = if (isTarget) 1f else 1f - (progress * 0.5f)
+                            val alpha = if (isTarget) 1f else 1f - progress
+                            
+                            if (alpha > 0f) {
+                                Image(
+                                    bitmap = data.bitmap,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .offset {
+                                            IntOffset(currentX.toInt(), currentY.toInt())
+                                        }
+                                        .size(
+                                            width = with(density) { (data.size.width * scale).toDp() },
+                                            height = with(density) { (data.size.height * scale).toDp() }
+                                        )
+                                        .alpha(alpha)
+                                        .clip(MaterialTheme.shapes.medium),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 2. Efecto Shatter (Rotura)
                 activeShatterEffects.forEach { (id, data) ->
                     val density = androidx.compose.ui.platform.LocalDensity.current
                     key(id) {
                         ShatterEffect(
                             bitmap = data.bitmap,
                             modifier = Modifier
-                                .offset(
-                                    x = with(density) { data.offset.x.toDp() },
-                                    y = with(density) { data.offset.y.toDp() }
-                                )
+                                .offset {
+                                    IntOffset(
+                                        (data.offset.x - galleryOffset.x).toInt(),
+                                        (data.offset.y - galleryOffset.y).toInt()
+                                    )
+                                }
                                 .size(
                                     width = with(density) { data.size.width.toDp() },
                                     height = with(density) { data.size.height.toDp() }

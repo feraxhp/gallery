@@ -82,7 +82,7 @@ fun GalleryImageTile(
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     modifier: Modifier = Modifier,
-    isSelected: Boolean = false,
+    isSelected: Boolean = true,
 ) {
     val index = remember { (image.id.toULong() % 12uL).toInt() }
     var state by remember { mutableStateOf(Type.LOADING) }
@@ -114,8 +114,11 @@ fun GalleryImageTile(
                 .clip(MaterialTheme.shapes.medium)
                 .background(
                     when (state) {
-                        Type.LOADING -> { MaterialTheme.colorScheme.surfaceContainerHigh }
-                        Type.LOADED -> { MaterialTheme.colorScheme.surfaceContainerHigh }
+                        Type.LOADING,
+                        Type.LOADED -> {
+                            if (isSelected) { MaterialTheme.colorScheme.inverseSurface }
+                            else { MaterialTheme.colorScheme.surfaceContainerHigh }
+                        }
                         Type.ERROR -> { MaterialTheme.colorScheme.errorContainer }
                     }
                 )
@@ -146,8 +149,11 @@ fun GalleryImageTile(
                         .size(30.dp)
                         .background(
                             when (state) {
-                                Type.LOADING -> { MaterialTheme.colorScheme.surfaceContainerHigh }
-                                Type.LOADED -> { MaterialTheme.colorScheme.surfaceContainerHigh }
+                                Type.LOADING,
+                                Type.LOADED -> {
+                                    if (isSelected) { MaterialTheme.colorScheme.inverseSurface }
+                                    else { MaterialTheme.colorScheme.surfaceContainerHigh }
+                                }
                                 Type.ERROR -> { MaterialTheme.colorScheme.onError }
                             },
                             MixedCornerShape(6.dp, 8.dp)
@@ -161,7 +167,10 @@ fun GalleryImageTile(
                             .background(
                                 color = when (state) {
                                     Type.LOADED,
-                                    Type.LOADING -> { MaterialTheme.colorScheme.onSurface }
+                                    Type.LOADING -> {
+                                        if (isSelected) { MaterialTheme.colorScheme.inversePrimary }
+                                        else { MaterialTheme.colorScheme.onSurface }
+                                    }
                                     Type.ERROR -> { MaterialTheme.colorScheme.onError }
                                 },
                                 shape = shapes[index].toShape()

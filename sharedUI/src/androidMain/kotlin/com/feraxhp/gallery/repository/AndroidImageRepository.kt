@@ -384,7 +384,9 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
         val shareIntent = Intent().apply {
             action = Intent.ACTION_SEND
             putExtra(Intent.EXTRA_STREAM, Uri.parse(image.uri))
-            type = if (image.type == MediaType.VIDEO) "video/*" else "image/*"
+            // Se usa application/octet-stream para que las apps receptoras lo traten como un archivo genérico
+            // y no procesen la imagen/video (manteniendo así la metadata original).
+            type = "application/octet-stream"
             flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
         }
         val chooser = Intent.createChooser(shareIntent, "Compartir con")
@@ -400,9 +402,8 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
         val shareIntent = Intent().apply {
             action = Intent.ACTION_SEND_MULTIPLE
             putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
-            type = if (images.all { it.type == MediaType.VIDEO }) "video/*" 
-                   else if (images.all { it.type == MediaType.IMAGE }) "image/*"
-                   else "*/*"
+            // Se usa application/octet-stream para que se envíen como archivos y se preserve la metadata.
+            type = "application/octet-stream"
             flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
         }
         val chooser = Intent.createChooser(shareIntent, "Compartir ${images.size} elementos con")

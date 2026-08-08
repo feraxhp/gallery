@@ -28,9 +28,11 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -87,6 +89,7 @@ fun GalleryImageTile(
     isSelected: Boolean = false,
     isSelectionMode: Boolean = false,
 ) {
+    val haptic = LocalHapticFeedback.current
     val index = remember { (image.id.toULong() % 12uL).toInt() }
     var state by remember { mutableStateOf(Type.LOADING) }
     val model = if (image.type == MediaType.VIDEO) {
@@ -128,12 +131,14 @@ fun GalleryImageTile(
                 .combinedClickable(
                     onClick = {
                         if (isSelectionMode) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onImageLongClick(image)
                         } else {
                             onImageClick(image, allImages)
                         }
                     },
                     onLongClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         onImageLongClick(image)
                     }
                 ),

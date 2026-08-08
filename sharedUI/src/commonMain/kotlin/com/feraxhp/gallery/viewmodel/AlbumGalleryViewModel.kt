@@ -25,6 +25,13 @@ class AlbumGalleryViewModel(private val repository: ImageRepository) : ViewModel
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
+    private val _selectedImageIds = MutableStateFlow<Set<Long>>(emptySet())
+    val selectedImageIds: StateFlow<Set<Long>> = _selectedImageIds.asStateFlow()
+
+    val isSelectionMode: StateFlow<Boolean> = _selectedImageIds
+        .map { it.isNotEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     private val _deletedImageId = MutableStateFlow<Long?>(null)
     val deletedImageId: StateFlow<Long?> = _deletedImageId.asStateFlow()
 
@@ -42,6 +49,18 @@ class AlbumGalleryViewModel(private val repository: ImageRepository) : ViewModel
 
     fun clearDeletedState() {
         _deletedImageId.value = null
+    }
+
+    fun toggleSelection(imageId: Long) {
+        if (imageId in _selectedImageIds.value) {
+            _selectedImageIds.value -= imageId
+        } else {
+            _selectedImageIds.value += imageId
+        }
+    }
+
+    fun clearSelection() {
+        _selectedImageIds.value = emptySet()
     }
 
     fun loadImages(albumId: String) {

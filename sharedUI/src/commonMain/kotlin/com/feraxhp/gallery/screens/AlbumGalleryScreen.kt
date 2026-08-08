@@ -67,6 +67,8 @@ fun AlbumGalleryScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     val deletedImageId by viewModel.deletedImageId.collectAsState()
+    val selectedImageIds by viewModel.selectedImageIds.collectAsState()
+    val isSelectionMode by viewModel.isSelectionMode.collectAsState()
     
     val isTransitionRunning = animatedVisibilityScope.transition.currentState != animatedVisibilityScope.transition.targetState
     val isTargetVisible = animatedVisibilityScope.transition.targetState == EnterExitState.Visible
@@ -89,6 +91,9 @@ fun AlbumGalleryScreen(
             isRefreshing = isRefreshing,
             onRefresh = { viewModel.refreshGallery(albumId) },
             onImageClick = onImageClick,
+            onToggleSelection = { viewModel.toggleSelection(it.id) },
+            selectedImageIds = selectedImageIds,
+            isSelectionMode = isSelectionMode,
             deletedImageId = deletedImageId,
             onClearDeletedState = { viewModel.clearDeletedState() },
             sharedTransitionScope = sharedTransitionScope,

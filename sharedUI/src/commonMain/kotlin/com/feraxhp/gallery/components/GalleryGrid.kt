@@ -41,6 +41,9 @@ fun GalleryGrid(
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     onImageClick: (GalleryImage, List<GalleryImage>) -> Unit,
+    onToggleSelection: (GalleryImage) -> Unit,
+    selectedImageIds: Set<Long>,
+    isSelectionMode: Boolean,
     deletedImageId: Long?,
     onClearDeletedState: () -> Unit,
     sharedTransitionScope: SharedTransitionScope,
@@ -164,6 +167,9 @@ fun GalleryGrid(
                                 image = image,
                                 allImages = images,
                                 onImageClick = onImageClick,
+                                onImageLongClick = onToggleSelection,
+                                isSelected = image.id in selectedImageIds,
+                                isSelectionMode = isSelectionMode,
                                 onPositioned = { rect ->
                                     imageBounds[image.id] = androidx.compose.ui.geometry.Rect(
                                         offset = Offset(

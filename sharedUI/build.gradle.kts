@@ -50,6 +50,7 @@ kotlin {
         }
 
         androidMain.dependencies {
+            implementation(libs.androidx.activityCompose)
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.coilVideo)
             implementation(libs.androidx.exifinterface)

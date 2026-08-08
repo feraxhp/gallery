@@ -39,6 +39,7 @@ import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.model.ShatterData
 import com.feraxhp.gallery.model.MediaType
 import com.feraxhp.gallery.repository.ImageRepository
+import com.feraxhp.gallery.util.BackHandler
 import com.feraxhp.gallery.util.rememberVideoModel
 import com.feraxhp.gallery.util.toImageBitmap
 import com.feraxhp.gallery.viewmodel.GalleryViewModel
@@ -83,6 +84,10 @@ fun GalleryScreen(
         if (animatedVisibilityScope.transition.targetState == EnterExitState.Visible) {
             viewModel.loadImages()
         }
+    }
+
+    BackHandler(enabled = isSelectionMode) {
+        viewModel.clearSelection()
     }
 
     GalleryGrid(

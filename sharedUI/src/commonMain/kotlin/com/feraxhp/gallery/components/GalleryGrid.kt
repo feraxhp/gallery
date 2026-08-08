@@ -85,11 +85,15 @@ fun GalleryGrid(
     LaunchedEffect(deletedImageIds) {
         if (deletedImageIds.isNotEmpty()) {
             val newShatters = mutableMapOf<Long, ShatterData>()
-            deletedImageIds.forEach { id ->
-                val bounds = imageBounds[id]
-                val bitmap = imageBitmaps[id]
+            
+            // Solo lanzamos la animación para la primera imagen en el grid que esté en el set de borradas
+            val firstIdToAnimate = currentImages.find { it.id in deletedImageIds }?.id
+            
+            if (firstIdToAnimate != null) {
+                val bounds = imageBounds[firstIdToAnimate]
+                val bitmap = imageBitmaps[firstIdToAnimate]
                 if (bounds != null && bitmap != null) {
-                    newShatters[id] = ShatterData(
+                    newShatters[firstIdToAnimate] = ShatterData(
                         bitmap = bitmap,
                         offset = IntOffset(bounds.left.toInt(), bounds.top.toInt()),
                         size = IntSize(bounds.width.toInt(), bounds.height.toInt())

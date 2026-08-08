@@ -92,6 +92,7 @@ fun AlbumGalleryScreen(
             onRefresh = { viewModel.refreshGallery(albumId) },
             onImageClick = onImageClick,
             onToggleSelection = { viewModel.toggleSelection(it.id) },
+            onSetSelection = { image, selected -> viewModel.setSelection(image.id, selected) },
             selectedImageIds = selectedImageIds,
             isSelectionMode = isSelectionMode,
             deletedImageId = deletedImageId,

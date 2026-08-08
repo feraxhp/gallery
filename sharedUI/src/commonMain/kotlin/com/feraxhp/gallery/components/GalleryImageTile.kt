@@ -2,9 +2,8 @@ package com.feraxhp.gallery.components
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CornerSize
@@ -74,13 +73,13 @@ enum class Type {
 
 
 @Suppress("RememberReturnType")
-@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun GalleryImageTile(
     image: GalleryImage,
     allImages: List<GalleryImage>,
     onImageClick: (GalleryImage, List<GalleryImage>) -> Unit,
-    onImageLongClick: (GalleryImage) -> Unit,
+    onToggleSelection: (GalleryImage) -> Unit,
     onPositioned: (androidx.compose.ui.geometry.Rect) -> Unit,
     onBitmapLoaded: (ImageBitmap) -> Unit,
     sharedTransitionScope: SharedTransitionScope,
@@ -128,20 +127,14 @@ fun GalleryImageTile(
                         Type.ERROR -> { MaterialTheme.colorScheme.errorContainer }
                     }
                 )
-                .combinedClickable(
-                    onClick = {
-                        if (isSelectionMode) {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onImageLongClick(image)
-                        } else {
-                            onImageClick(image, allImages)
-                        }
-                    },
-                    onLongClick = {
+                .clickable {
+                    if (isSelectionMode) {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onImageLongClick(image)
+                        onToggleSelection(image)
+                    } else {
+                        onImageClick(image, allImages)
                     }
-                ),
+                },
             contentAlignment = Alignment.Center
         ) {
             if(state != Type.LOADED) {

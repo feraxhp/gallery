@@ -1,7 +1,7 @@
 package com.feraxhp.gallery.components
 
 import androidx.compose.animation.*
-import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -17,8 +17,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -33,6 +36,11 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Duration.Companion.milliseconds
 
+data class DragSelectionInfo(
+    val initialSelection: Boolean,
+    val affectedIds: MutableSet<Long>
+)
+
 @OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun GalleryGrid(
@@ -42,6 +50,7 @@ fun GalleryGrid(
     onRefresh: () -> Unit,
     onImageClick: (GalleryImage, List<GalleryImage>) -> Unit,
     onToggleSelection: (GalleryImage) -> Unit,
+    onSetSelection: (GalleryImage, Boolean) -> Unit,
     selectedImageIds: Set<Long>,
     isSelectionMode: Boolean,
     deletedImageId: Long?,
@@ -63,6 +72,13 @@ fun GalleryGrid(
     var activeShatterEffect by remember { mutableStateOf<ShatterData?>(null) }
     
     val pullToRefreshState = rememberPullToRefreshState()
+    val haptic = LocalHapticFeedback.current
+    var dragSelectionState by remember { mutableStateOf<DragSelectionInfo?>(null) }
+    
+    // Usamos rememberUpdatedState para evitar reiniciar el pointerInput cuando cambian las funciones o estados
+    val currentImages by rememberUpdatedState(images)
+    val currentOnSetSelection by rememberUpdatedState(onSetSelection)
+    val currentSelectedImageIds by rememberUpdatedState(selectedImageIds)
     
     LaunchedEffect(deletedImageId) {
         val id = deletedImageId
@@ -107,6 +123,34 @@ fun GalleryGrid(
         Box(
             modifier = modifier
                 .onGloballyPositioned { galleryOffset = it.positionInRoot() }
+                .pointerInput(Unit) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { offset ->
+                            val rootOffset = galleryOffset + offset
+                            val imageId = imageBounds.entries.find { it.value.contains(rootOffset) }?.key
+                            val image = currentImages.find { it.id == imageId }
+                            if (image != null) {
+                                val isCurrentlySelected = image.id in currentSelectedImageIds
+                                dragSelectionState = DragSelectionInfo(!isCurrentlySelected, mutableSetOf(image.id))
+                                currentOnSetSelection(image, !isCurrentlySelected)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+                        },
+                        onDrag = { change, _ ->
+                            val rootOffset = galleryOffset + change.position
+                            val imageId = imageBounds.entries.find { it.value.contains(rootOffset) }?.key
+                            val image = currentImages.find { it.id == imageId }
+                            val state = dragSelectionState
+                            if (image != null && state != null && image.id !in state.affectedIds) {
+                                currentOnSetSelection(image, state.initialSelection)
+                                state.affectedIds.add(image.id)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+                        },
+                        onDragEnd = { dragSelectionState = null },
+                        onDragCancel = { dragSelectionState = null }
+                    )
+                }
         ) {
             PullToRefreshBox(
                 isRefreshing = isRefreshing,
@@ -167,17 +211,11 @@ fun GalleryGrid(
                                 image = image,
                                 allImages = images,
                                 onImageClick = onImageClick,
-                                onImageLongClick = onToggleSelection,
+                                onToggleSelection = onToggleSelection,
                                 isSelected = image.id in selectedImageIds,
                                 isSelectionMode = isSelectionMode,
                                 onPositioned = { rect ->
-                                    imageBounds[image.id] = androidx.compose.ui.geometry.Rect(
-                                        offset = Offset(
-                                            rect.left - galleryOffset.x,
-                                            rect.top - galleryOffset.y
-                                        ),
-                                        size = rect.size
-                                    )
+                                    imageBounds[image.id] = rect
                                 },
                                 onBitmapLoaded = { bitmap ->
                                     imageBitmaps[image.id] = bitmap

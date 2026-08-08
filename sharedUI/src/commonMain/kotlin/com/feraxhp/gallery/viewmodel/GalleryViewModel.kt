@@ -64,6 +64,14 @@ class GalleryViewModel(private val repository: ImageRepository) : ViewModel(), G
         }
     }
 
+    fun setSelection(imageId: Long, selected: Boolean) {
+        if (selected) {
+            _selectedImageIds.value += imageId
+        } else {
+            _selectedImageIds.value -= imageId
+        }
+    }
+
     fun clearSelection() {
         _selectedImageIds.value = emptySet()
     }

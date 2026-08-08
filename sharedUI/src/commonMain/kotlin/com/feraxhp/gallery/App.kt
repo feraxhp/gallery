@@ -212,8 +212,10 @@ fun App(
                         // Activamos la animación de shatter para todas
                         handler?.markAsDeleted(imagesToDelete.map { it.id }.toSet(), fromDetail = isDetailActive)
                         
-                        // Esperamos unos 400ms para que la animación capture los datos necesarios 
-                        delay(400.milliseconds)
+                        // Esperamos a que la animación termine. 
+                        // Si es desde detail, la transición de regreso dura 500ms, así que esperamos más.
+                        val deleteDelay = if (isDetailActive) 1000.milliseconds else 600.milliseconds
+                        delay(deleteDelay)
                         imagesToDelete.forEach { handler?.hideImage(it.id) }
                         
                         handler?.clearSelection()

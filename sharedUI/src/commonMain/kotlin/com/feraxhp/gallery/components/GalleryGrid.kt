@@ -101,7 +101,6 @@ fun GalleryGrid(
                 return@LaunchedEffect
             }
             
-            gatheringTargetId = targetId
             val gatherMap = mutableMapOf<Long, ShatterData>()
             deletedImageIds.forEach { id ->
                 val bounds = imageBounds[id]
@@ -114,60 +113,60 @@ fun GalleryGrid(
                     )
                 }
             }
-            imagesToGather = gatherMap
+            
+            gatheringTargetId = targetId
 
-            if (imagesToGather.isNotEmpty()) {
-                // Ajustamos el tiempo de espera según el origen del borrado
+            if (gatherMap.isNotEmpty()) {
                 if (isDeletedFromDetail) {
-                    // Si venimos de detail, esperamos a que la transición termine del todo
+                    // Caso 1: Borrado desde Detail - Sin animación de reunión
                     snapshotFlow { animatedVisibilityScope.transition.currentState == EnterExitState.Visible }
                         .first { it }
-                    // Margen extra para estabilidad de coordenadas
-//                    delay(50.milliseconds)
+                    delay(60.milliseconds)
+                    
+                    imagesToGather = gatherMap
+                    
+                    val targetData = gatherMap[targetId]
+                    if (targetData != null) {
+                        activeShatterEffects = activeShatterEffects + (targetId to targetData)
+                    }
+                    // Esperamos un poco para asegurar que el shatter sea visible antes de terminar el efecto
+                    delay(100.milliseconds)
                 } else {
-                    // Si es desde el grid, podemos empezar casi de inmediato (targetState)
+                    // Caso 2: Borrado desde el Grid - Con animación de reunión (Gathering)
                     snapshotFlow { animatedVisibilityScope.transition.targetState == EnterExitState.Visible }
                         .first { it }
+                    
+                    imagesToGather = gatherMap
+
+                    val targetData = gatherMap[targetId]
+                    val maxDistance = if (targetData != null) {
+                        gatherMap.values.maxOfOrNull {
+                            val dx = (it.offset.x - targetData.offset.x).toFloat()
+                            val dy = (it.offset.y - targetData.offset.y).toFloat()
+                            kotlin.math.sqrt(dx * dx + dy * dy)
+                        } ?: 0f
+                    } else 0f
+                    
+                    val calculatedDuration = ((maxDistance / 1200f) * 1000).toInt().coerceIn(350, 550)
+
+                    gatheringProgress.snapTo(0f)
+                    
+                    val gatheringJob = launch {
+                        gatheringProgress.animateTo(
+                            targetValue = 1f,
+                            animationSpec = tween(durationMillis = calculatedDuration, easing = FastOutSlowInEasing)
+                        )
+                    }
+
+                    // Solapamos el inicio del ShatterEffect antes de que termine la reunión
+                    delay((calculatedDuration * 0.80f).toInt().milliseconds)
+
+                    if (targetData != null) {
+                        activeShatterEffects = activeShatterEffects + (targetId to targetData)
+                    }
+                    
+                    gatheringJob.join()
                 }
-
-                // Deducimos la duración basándonos en la distancia máxima para mantener una velocidad constante
-                val targetData = gatherMap[targetId]
-                val maxDistance = if (targetData != null) {
-                    gatherMap.values.maxOfOrNull {
-                        val dx = (it.offset.x - targetData.offset.x).toFloat()
-                        val dy = (it.offset.y - targetData.offset.y).toFloat()
-                        kotlin.math.sqrt(dx * dx + dy * dy)
-                    } ?: 0f
-                } else 0f
-                
-                // Calculamos duración: Un poco más lento para que se aprecie mejor el movimiento
-                // Velocidad = 1200 px/s.
-                val calculatedDuration = ((maxDistance / 1200f) * 1000).toInt().coerceIn(350, 550)
-
-                // Animación de reunir todas las imágenes
-                gatheringProgress.snapTo(0f)
-                
-                // Ejecutamos la animación en una corrutina paralela para permitir el solapamiento
-                val gatheringJob = launch {
-                    gatheringProgress.animateTo(
-                        targetValue = 1f,
-                        animationSpec = tween(durationMillis = calculatedDuration, easing = FastOutSlowInEasing)
-                    )
-                }
-
-                // Solapamos el inicio del ShatterEffect justo antes de que termine la reunión
-                // Si es desde detail, queremos que sea muy preciso (98%)
-                // Si es desde grid, puede solaparse un poco más (90%) para que sea fluido
-                val overlapFactor = if (isDeletedFromDetail) .01f else 0.80f
-                delay((calculatedDuration * overlapFactor).toInt().milliseconds)
-
-                // Disparamos el efecto shatter solo para la primera
-                if (targetData != null) {
-                    activeShatterEffects = activeShatterEffects + (targetId to targetData)
-                }
-                
-                // Esperamos a que la reunión termine formalmente
-                gatheringJob.join()
                 
                 // Limpiar estado de reunión
                 imagesToGather = emptyMap()

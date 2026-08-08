@@ -13,5 +13,6 @@ interface ImageRepository {
     suspend fun copyImage(image: GalleryImage): Boolean
     fun openInFileManager(path: String)
     fun shareImage(image: GalleryImage)
+    fun shareImages(images: List<GalleryImage>)
     suspend fun refreshMedia()
 }

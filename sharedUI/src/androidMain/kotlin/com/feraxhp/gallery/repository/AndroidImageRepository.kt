@@ -392,6 +392,24 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
         context.startActivity(chooser)
     }
 
+    override fun shareImages(images: List<GalleryImage>) {
+        if (images.isEmpty()) return
+        val uris = ArrayList<Uri>()
+        images.forEach { uris.add(Uri.parse(it.uri)) }
+        
+        val shareIntent = Intent().apply {
+            action = Intent.ACTION_SEND_MULTIPLE
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            type = if (images.all { it.type == MediaType.VIDEO }) "video/*" 
+                   else if (images.all { it.type == MediaType.IMAGE }) "image/*"
+                   else "*/*"
+            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+        }
+        val chooser = Intent.createChooser(shareIntent, "Compartir ${images.size} elementos con")
+        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(chooser)
+    }
+
     override suspend fun getImageById(id: Long, type: MediaType): GalleryImage? = withContext(Dispatchers.IO) {
         val uri = if (type == MediaType.VIDEO) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val selection = "${MediaStore.MediaColumns._ID} = ?"

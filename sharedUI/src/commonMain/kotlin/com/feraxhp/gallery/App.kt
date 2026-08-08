@@ -53,6 +53,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DriveFileMove
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoAlbum
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -78,6 +79,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -110,6 +112,7 @@ import androidx.media3.common.util.Log
 import androidx.media3.common.util.UnstableApi
 import co.touchlab.kermit.Logger
 import com.feraxhp.gallery.components.NavigationItem
+import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.navigation.Destination
 import com.feraxhp.gallery.repository.ImageRepository
 import com.feraxhp.gallery.screens.AlbumsScreen
@@ -174,48 +177,63 @@ fun App(
     var pendingDeleteJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
 
+    val selectedIds = activeActionHandler?.selectedImageIds?.collectAsState()?.value ?: emptySet()
+    val allImages = activeActionHandler?.images?.collectAsState()?.value ?: emptyList()
+    val selectedImages = remember(selectedIds, allImages) {
+        allImages.filter { it.id in selectedIds }
+    }
+
     SetSystemBarsColor(isDark = isDetailActive || isSystemDark)
 
-    if (showDeleteConfirmation && currentImageInDetail != null) {
+    if (showDeleteConfirmation && (currentImageInDetail != null || selectedImages.isNotEmpty())) {
+        val imagesToDelete = if (isDetailActive) listOfNotNull(currentImageInDetail) else selectedImages
+        val title = if (imagesToDelete.size == 1) "Borrar imagen" else "Borrar ${imagesToDelete.size} imágenes"
+        val message = if (imagesToDelete.size == 1) "¿Estás seguro de que quieres borrar esta imagen?" else "¿Estás seguro de que quieres borrar estas ${imagesToDelete.size} imágenes?"
+        
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
-            title = { Text("Borrar imagen") },
-            text = { Text("¿Estás seguro de que quieres borrar esta imagen?") },
+            title = { Text(title) },
+            text = { Text(message) },
             confirmButton = {
                 TextButton(onClick = {
-                    val imageToDelete = currentImageInDetail!!
                     val currentBackstack = backStack
                     showDeleteConfirmation = false
                     
                     snackbarHostState.currentSnackbarData?.dismiss()
                     pendingDeleteJob?.cancel()
                     pendingDeleteJob = scope.launch {
-                        // Salimos de la pantalla de detalle
-                        if (backStack.size > 1) {
+                        // Salimos de la pantalla de detalle si aplica
+                        if (isDetailActive && backStack.size > 1) {
                             backStack = backStack.dropLast(1)
                         }
-
-                        // Activamos la animación de shatter
-                        activeActionHandler?.markAsDeleted(imageToDelete.id)
                         
-                        // Esperamos unos 300ms para que la animación capture los datos necesarios 
-                        // antes de ocultar la imagen del grid
+                        val handler = activeActionHandler
+                        
+                        // Activamos la animación de shatter para todas
+                        imagesToDelete.forEach { handler?.markAsDeleted(it.id) }
+                        
+                        // Esperamos unos 400ms para que la animación capture los datos necesarios 
                         delay(400.milliseconds)
-                        activeActionHandler?.hideImage(imageToDelete.id)
+                        imagesToDelete.forEach { handler?.hideImage(it.id) }
                         
+                        handler?.clearSelection()
+                        
+                        val snackbarMessage = if (imagesToDelete.size == 1) "Imagen eliminada" else "${imagesToDelete.size} imágenes eliminadas"
                         val result = snackbarHostState.showSnackbar(
-                            message = "Imagen eliminada",
+                            message = snackbarMessage,
                             actionLabel = "Deshacer",
                             duration = SnackbarDuration.Short
                         )
                         
                         if (result == SnackbarResult.ActionPerformed) {
-                            // Si se pulsa Undo, volvemos a mostrarla y navegamos al detalle
-                            activeActionHandler?.restoreImage(imageToDelete.id)
-                            backStack = currentBackstack
+                            // Si se pulsa Undo, volvemos a mostrarlas
+                            imagesToDelete.forEach { handler?.restoreImage(it.id) }
+                            if (isDetailActive) {
+                                backStack = currentBackstack
+                            }
                         } else {
                             // Si no se pulsa, borramos definitivamente
-                            repository.deleteImage(imageToDelete)
+                            imagesToDelete.forEach { repository.deleteImage(it) }
                         }
                     }
                 }) {
@@ -284,9 +302,9 @@ fun App(
             topBar = {
                 val title = when (currentDestination) {
                     Destination.Permissions -> ""
-                    Destination.Gallery -> "Fotos"
+                    Destination.Gallery -> if (selectedIds.isNotEmpty()) "${selectedIds.size} seleccionadas" else "Fotos"
                     Destination.Albums -> "Álbumes"
-                    is Destination.AlbumGallery -> currentDestination.albumName
+                    is Destination.AlbumGallery -> if (selectedIds.isNotEmpty()) "${selectedIds.size} seleccionadas" else currentDestination.albumName
                     is Destination.Detail -> "Detalle"
                     is Destination.MoveToAlbum -> "Mover a álbum"
                     else -> ""
@@ -300,7 +318,11 @@ fun App(
                         actionIconContentColor = appBarContentColor
                     ),
                     navigationIcon = {
-                        if (backStack.size > 1 && currentDestination != Destination.Albums) {
+                        if (selectedIds.isNotEmpty()) {
+                            IconButton(onClick = { activeActionHandler?.clearSelection() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Cerrar selección")
+                            }
+                        } else if (backStack.size > 1 && currentDestination != Destination.Albums) {
                             IconButton(onClick = {
                                 if (backStack.size > 1) {
                                     backStack = backStack.dropLast(1)
@@ -325,7 +347,7 @@ fun App(
                             IconButton(onClick = {
                                 currentImageInDetail?.let {
                                     backStack = backStack + Destination.MoveToAlbum(
-                                        it,
+                                        listOf(it),
                                         (currentDestination as Destination.Detail).allImages
                                     )
                                 }
@@ -339,6 +361,28 @@ fun App(
                                 showDeleteConfirmation = true
                             }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Borrar")
+                            }
+                        } else if (selectedImages.isNotEmpty()) {
+                            IconButton(onClick = {
+                                repository.shareImages(selectedImages)
+                            }) {
+                                Icon(Icons.Default.Share, contentDescription = "Compartir seleccionadas")
+                            }
+                            IconButton(onClick = {
+                                backStack = backStack + Destination.MoveToAlbum(
+                                    selectedImages,
+                                    allImages
+                                )
+                            }) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.DriveFileMove,
+                                    contentDescription = "Mover seleccionadas"
+                                )
+                            }
+                            IconButton(onClick = {
+                                showDeleteConfirmation = true
+                            }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Borrar seleccionadas")
                             }
                         }
                     }
@@ -626,55 +670,57 @@ fun App(
                                         topPadding = topPadding,
                                         onAlbumSelected = { album ->
                                             scope.launch {
-                                                val originalAlbumId = key.image.albumId
-                                                val updatedImage =
-                                                    repository.moveImage(key.image, album.id)
-                                                if (updatedImage != null) {
-                                                    val newAllImages = key.allImages.map {
-                                                        if (it.id == updatedImage.id) updatedImage else it
+                                                val handler = activeActionHandler
+                                                val originalImagesState = key.images.map { it.id to it.albumId }
+                                                
+                                                val results = key.images.map { image ->
+                                                    image to repository.moveImage(image, album.id)
+                                                }
+                                                
+                                                val successfulMoves = results.filter { it.second != null }
+                                                val updatedImages = results.map { it.second ?: it.first }
+                                                
+                                                if (successfulMoves.isNotEmpty()) {
+                                                    val newAllImages = key.allImages.map { current ->
+                                                        updatedImages.find { it.id == current.id } ?: current
                                                     }
-                                                    // Actualizamos la entrada anterior en el backstack (el Detail)
-                                                    // y quitamos la actual (MoveToAlbum)
-                                                    backStack =
-                                                        backStack.dropLast(1).let { list ->
-                                                            if (list.isNotEmpty() && list.last() is Destination.Detail) {
-                                                                list.dropLast(1) + Destination.Detail(
-                                                                    updatedImage,
-                                                                    newAllImages
-                                                                )
-                                                            } else {
-                                                                list
-                                                            }
-                                                        }
+                                                    
+                                                    // Actualizamos la entrada anterior en el backstack (el Detail si venía de ahí)
+                                                    if (backStack.size > 1 && backStack[backStack.size - 2] is Destination.Detail) {
+                                                        val detailDest = backStack[backStack.size - 2] as Destination.Detail
+                                                        val newCurrentImage = updatedImages.find { it.id == detailDest.image.id } ?: detailDest.image
+                                                        backStack = backStack.dropLast(1).dropLast(1) + Destination.Detail(newCurrentImage, newAllImages)
+                                                    } else {
+                                                        backStack = backStack.dropLast(1)
+                                                    }
+                                                    
+                                                    handler?.clearSelection()
                                                     
                                                     snackbarHostState.currentSnackbarData?.dismiss()
-                                                    // Snackbar de éxito con opción de Deshacer
+                                                    val snackbarMessage = if (successfulMoves.size == 1) 
+                                                        "Imagen movida a ${album.name}" 
+                                                    else "${successfulMoves.size} imágenes movidas a ${album.name}"
+                                                    
                                                     val result = snackbarHostState.showSnackbar(
-                                                        message = "Imagen movida a ${album.name}",
+                                                        message = snackbarMessage,
                                                         actionLabel = "Deshacer",
                                                         duration = SnackbarDuration.Short
                                                     )
                                                     
-                                                    if (result == SnackbarResult.ActionPerformed && originalAlbumId != null) {
-                                                        // Deshacer el movimiento
-                                                        val revertedImage = repository.moveImage(updatedImage, originalAlbumId)
-                                                        if (revertedImage != null) {
-                                                            // Restaurar navegación y mostrar mensaje de cancelación
-                                                            val revertedAllImages = newAllImages.map {
-                                                                if (it.id == revertedImage.id) revertedImage else it
+                                                    if (result == SnackbarResult.ActionPerformed) {
+                                                        successfulMoves.forEach { (originalImage, movedImage) ->
+                                                            val originalAlbumId = originalImagesState.find { it.first == originalImage.id }?.second
+                                                            if (originalAlbumId != null && movedImage != null) {
+                                                                repository.moveImage(movedImage, originalAlbumId)
                                                             }
-                                                            if (backStack.isNotEmpty() && backStack.last() is Destination.Detail) {
-                                                                backStack = backStack.dropLast(1) + Destination.Detail(
-                                                                    revertedImage,
-                                                                    revertedAllImages
-                                                                )
-                                                            }
-                                                            snackbarHostState.showSnackbar("Movimiento cancelado")
                                                         }
+                                                        snackbarHostState.showSnackbar("Movimiento cancelado")
+                                                        // Nota: La restauración de la navegación de detalle es compleja aquí, 
+                                                        // simplificamos dejando al usuario donde está o volviendo si es posible.
                                                     }
                                                 } else {
                                                     snackbarHostState.currentSnackbarData?.dismiss()
-                                                    snackbarHostState.showSnackbar("Error al mover la imagen")
+                                                    snackbarHostState.showSnackbar("Error al mover")
                                                     if (backStack.size > 1) {
                                                         backStack = backStack.dropLast(1)
                                                     }
@@ -705,6 +751,8 @@ fun AppPreview() {
         override suspend fun copyImage(image: com.feraxhp.gallery.model.GalleryImage): Boolean = true
         override fun openInFileManager(path: String) {}
         override fun shareImage(image: com.feraxhp.gallery.model.GalleryImage) {}
+        override fun shareImages(images: List<GalleryImage>) {}
+
         override suspend fun refreshMedia() {}
     }
     App(

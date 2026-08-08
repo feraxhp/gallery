@@ -19,7 +19,7 @@ sealed interface Destination {
     ) : Destination
     @Serializable
     data class MoveToAlbum(
-        val image: com.feraxhp.gallery.model.GalleryImage,
+        val images: List<com.feraxhp.gallery.model.GalleryImage>,
         val allImages: List<com.feraxhp.gallery.model.GalleryImage>
     ) : Destination
 }

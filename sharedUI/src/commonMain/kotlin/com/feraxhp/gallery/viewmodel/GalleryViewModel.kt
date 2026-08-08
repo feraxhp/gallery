@@ -20,7 +20,7 @@ class GalleryViewModel(private val repository: ImageRepository) : ViewModel(), G
     private val _images = MutableStateFlow<List<GalleryImage>>(emptyList())
     private val _hiddenImageIds = MutableStateFlow<Set<Long>>(emptySet())
 
-    val images: StateFlow<List<GalleryImage>> = combine(_images, _hiddenImageIds) { images, hiddenIds ->
+    override val images: StateFlow<List<GalleryImage>> = combine(_images, _hiddenImageIds) { images, hiddenIds ->
         images.filter { it.id !in hiddenIds }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -31,7 +31,7 @@ class GalleryViewModel(private val repository: ImageRepository) : ViewModel(), G
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
     private val _selectedImageIds = MutableStateFlow<Set<Long>>(emptySet())
-    val selectedImageIds: StateFlow<Set<Long>> = _selectedImageIds.asStateFlow()
+    override val selectedImageIds: StateFlow<Set<Long>> = _selectedImageIds.asStateFlow()
 
     val isSelectionMode: StateFlow<Boolean> = _selectedImageIds
         .map { it.isNotEmpty() }
@@ -72,7 +72,7 @@ class GalleryViewModel(private val repository: ImageRepository) : ViewModel(), G
         }
     }
 
-    fun clearSelection() {
+    override fun clearSelection() {
         _selectedImageIds.value = emptySet()
     }
 

@@ -310,7 +310,7 @@ fun GalleryGrid(
                             val currentY = (data.offset.y - galleryOffset.y) + 
                                 ((targetData.offset.y - data.offset.y) * progress)
                             
-                            val scale = if (isTarget) 1f else 1f - (progress * 0.5f)
+                            val scale = 1f //if (isTarget) 1f else 1f - (progress * 0.1f)
                             val alpha = if (isTarget) 1f else 1f - progress
                             
                             if (alpha > 0f) {

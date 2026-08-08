@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.model.ShatterData
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.datetime.Instant
@@ -130,21 +131,31 @@ fun GalleryGrid(
                     } ?: 0f
                 } else 0f
                 
-                // Calculamos duración: ~400ms para una distancia media (~600px)
-                // Velocidad = 1500 px/s. Limitamos el rango para no romper el delay de App.kt
-                val calculatedDuration = ((maxDistance / 1500f) * 1000).toInt().coerceIn(300, 450)
+                // Calculamos duración: Un poco más lento para que se aprecie mejor el movimiento
+                // Velocidad = 1200 px/s.
+                val calculatedDuration = ((maxDistance / 1200f) * 1000).toInt().coerceIn(350, 550)
 
                 // Animación de reunir todas las imágenes
                 gatheringProgress.snapTo(0f)
-                gatheringProgress.animateTo(
-                    targetValue = 1f,
-                    animationSpec = tween(durationMillis = calculatedDuration, easing = FastOutSlowInEasing)
-                )
+                
+                // Ejecutamos la animación en una corrutina paralela para permitir el solapamiento
+                val gatheringJob = launch {
+                    gatheringProgress.animateTo(
+                        targetValue = 1f,
+                        animationSpec = tween(durationMillis = calculatedDuration, easing = FastOutSlowInEasing)
+                    )
+                }
 
-                // Una vez reunidas, disparamos el efecto shatter solo para la primera
+                // Solapamos el inicio del ShatterEffect antes de que termine la reunión (al 85% del trayecto)
+                delay((calculatedDuration * 0.85f).toInt().milliseconds)
+
+                // Disparamos el efecto shatter solo para la primera
                 if (targetData != null) {
                     activeShatterEffects = activeShatterEffects + (targetId to targetData)
                 }
+                
+                // Esperamos a que la reunión termine formalmente
+                gatheringJob.join()
                 
                 // Limpiar estado de reunión
                 imagesToGather = emptyMap()
@@ -310,7 +321,7 @@ fun GalleryGrid(
                             val currentY = (data.offset.y - galleryOffset.y) + 
                                 ((targetData.offset.y - data.offset.y) * progress)
                             
-                            val scale = 1f //if (isTarget) 1f else 1f - (progress * 0.1f)
+                            val scale = 1f
                             val alpha = if (isTarget) 1f else 1f - progress
                             
                             if (alpha > 0f) {
@@ -340,6 +351,7 @@ fun GalleryGrid(
                     key(id) {
                         ShatterEffect(
                             bitmap = data.bitmap,
+                            size = data.size,
                             modifier = Modifier
                                 .offset {
                                     IntOffset(

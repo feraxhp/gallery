@@ -36,14 +36,16 @@ private data class Particle(
 @Composable
 fun ShatterEffect(
     bitmap: ImageBitmap,
+    size: IntSize,
     modifier: Modifier = Modifier,
     onAnimationEnd: () -> Unit = {}
 ) {
     val particleCountPerSide = 30
     val progress = remember { Animatable(0f) }
     
-    // Necesitamos saber el tamaño del Canvas para escalar las partículas
-    var canvasSize by remember { mutableStateOf(androidx.compose.ui.geometry.Size.Zero) }
+    val canvasSize = remember(size) { 
+        androidx.compose.ui.geometry.Size(size.width.toFloat(), size.height.toFloat()) 
+    }
 
     LaunchedEffect(bitmap) {
         progress.animateTo(
@@ -105,7 +107,7 @@ fun ShatterEffect(
         }
     }
 
-    Canvas(modifier = modifier.onGloballyPositioned { canvasSize = androidx.compose.ui.geometry.Size(it.size.width.toFloat(), it.size.height.toFloat()) }) {
+    Canvas(modifier = modifier) {
         if (particles.isEmpty()) return@Canvas
         val t = progress.value
         

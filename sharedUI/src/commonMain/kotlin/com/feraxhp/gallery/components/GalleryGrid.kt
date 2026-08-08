@@ -53,7 +53,7 @@ fun GalleryGrid(
     onSetSelection: (GalleryImage, Boolean) -> Unit,
     selectedImageIds: Set<Long>,
     isSelectionMode: Boolean,
-    deletedImageId: Long?,
+    deletedImageIds: Set<Long>,
     onClearDeletedState: () -> Unit,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
@@ -69,7 +69,7 @@ fun GalleryGrid(
     val imageBitmaps = remember { mutableStateMapOf<Long, ImageBitmap>() }
     
     // Estado para la animación activa
-    var activeShatterEffect by remember { mutableStateOf<ShatterData?>(null) }
+    var activeShatterEffects by remember { mutableStateOf<Map<Long, ShatterData>>(emptyMap()) }
     
     val pullToRefreshState = rememberPullToRefreshState()
     val haptic = LocalHapticFeedback.current
@@ -80,24 +80,29 @@ fun GalleryGrid(
     val currentOnSetSelection by rememberUpdatedState(onSetSelection)
     val currentSelectedImageIds by rememberUpdatedState(selectedImageIds)
     
-    LaunchedEffect(deletedImageId) {
-        val id = deletedImageId
-        if (id != null) {
-            val bounds = imageBounds[id]
-            val bitmap = imageBitmaps[id]
-            
-            if (bounds != null && bitmap != null) {
+    LaunchedEffect(deletedImageIds) {
+        if (deletedImageIds.isNotEmpty()) {
+            val newShatters = mutableMapOf<Long, ShatterData>()
+            deletedImageIds.forEach { id ->
+                val bounds = imageBounds[id]
+                val bitmap = imageBitmaps[id]
+                if (bounds != null && bitmap != null) {
+                    newShatters[id] = ShatterData(
+                        bitmap = bitmap,
+                        offset = IntOffset(bounds.left.toInt(), bounds.top.toInt()),
+                        size = IntSize(bounds.width.toInt(), bounds.height.toInt())
+                    )
+                }
+            }
+
+            if (newShatters.isNotEmpty()) {
                 // Esperar a que la transición sea visible (comienza antes de que termine del todo)
                 snapshotFlow { animatedVisibilityScope.transition.targetState == EnterExitState.Visible }
                     .first { it }
 
-                delay(390.milliseconds) // Retraso de 50ms para sincronizar mejor
+                delay(390.milliseconds) // Retraso para sincronizar mejor
                 
-                activeShatterEffect = ShatterData(
-                    bitmap = bitmap,
-                    offset = IntOffset(bounds.left.toInt(), bounds.top.toInt()),
-                    size = IntSize(bounds.width.toInt(), bounds.height.toInt())
-                )
+                activeShatterEffects = activeShatterEffects + newShatters
             }
             // Limpiamos el estado en el ViewModel para que no se repita
             onClearDeletedState()
@@ -231,23 +236,25 @@ fun GalleryGrid(
             
             // El ShatterEffect se dibuja encima de todo en un Box de pantalla completa
             Box(Modifier.fillMaxSize()) {
-                activeShatterEffect?.let { data ->
+                activeShatterEffects.forEach { (id, data) ->
                     val density = androidx.compose.ui.platform.LocalDensity.current
-                    ShatterEffect(
-                        bitmap = data.bitmap,
-                        modifier = Modifier
-                            .offset(
-                                x = with(density) { data.offset.x.toDp() },
-                                y = with(density) { data.offset.y.toDp() }
-                            )
-                            .size(
-                                width = with(density) { data.size.width.toDp() },
-                                height = with(density) { data.size.height.toDp() }
-                            ),
-                        onAnimationEnd = {
-                            activeShatterEffect = null
-                        }
-                    )
+                    key(id) {
+                        ShatterEffect(
+                            bitmap = data.bitmap,
+                            modifier = Modifier
+                                .offset(
+                                    x = with(density) { data.offset.x.toDp() },
+                                    y = with(density) { data.offset.y.toDp() }
+                                )
+                                .size(
+                                    width = with(density) { data.size.width.toDp() },
+                                    height = with(density) { data.size.height.toDp() }
+                                ),
+                            onAnimationEnd = {
+                                activeShatterEffects = activeShatterEffects - id
+                            }
+                        )
+                    }
                 }
             }
         }

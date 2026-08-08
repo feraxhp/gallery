@@ -37,11 +37,11 @@ class GalleryViewModel(private val repository: ImageRepository) : ViewModel(), G
         .map { it.isNotEmpty() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    private val _deletedImageId = MutableStateFlow<Long?>(null)
-    val deletedImageId: StateFlow<Long?> = _deletedImageId.asStateFlow()
+    private val _deletedImageIds = MutableStateFlow<Set<Long>>(emptySet())
+    override val deletedImageIds: StateFlow<Set<Long>> = _deletedImageIds.asStateFlow()
 
-    override fun markAsDeleted(imageId: Long) {
-        _deletedImageId.value = imageId
+    override fun markAsDeleted(imageIds: Set<Long>) {
+        _deletedImageIds.value = imageIds
     }
 
     override fun hideImage(imageId: Long) {
@@ -52,8 +52,8 @@ class GalleryViewModel(private val repository: ImageRepository) : ViewModel(), G
         _hiddenImageIds.value -= imageId
     }
 
-    fun clearDeletedState() {
-        _deletedImageId.value = null
+    override fun clearDeletedState() {
+        _deletedImageIds.value = emptySet()
     }
 
     fun toggleSelection(imageId: Long) {

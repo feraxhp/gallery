@@ -22,6 +22,8 @@ class GalleryViewModel(
     private val logger = Logger.withTag("GalleryViewModel")
     private val _images = MutableStateFlow<List<GalleryImage>>(emptyList())
     private val _hiddenImageIds = MutableStateFlow<Set<Long>>(emptySet())
+    private val _loadingMetadataIds = MutableStateFlow<Set<Long>>(emptySet())
+    override val loadingMetadataIds: StateFlow<Set<Long>> = _loadingMetadataIds.asStateFlow()
 
     override val images: StateFlow<List<GalleryImage>> = combine(_images, _hiddenImageIds) { images, hiddenIds ->
         images.filter { it.id !in hiddenIds }
@@ -49,6 +51,24 @@ class GalleryViewModel(
     override fun markAsDeleted(imageIds: Set<Long>, fromDetail: Boolean) {
         _isDeletedFromDetail.value = fromDetail
         _deletedImageIds.value = imageIds
+    }
+
+    override fun loadFullMetadata(image: GalleryImage) {
+        if (image.id in _loadingMetadataIds.value) return
+        
+        viewModelScope.launch {
+            _loadingMetadataIds.value += image.id
+            try {
+                val updatedImage = repository.loadFullMetadata(image)
+                _images.value = _images.value.map {
+                    if (it.id == image.id) updatedImage else it
+                }
+            } catch (e: Exception) {
+                logger.e(e) { "Error loading full metadata for image ${image.id}" }
+            } finally {
+                _loadingMetadataIds.value -= image.id
+            }
+        }
     }
 
     override fun hideImage(imageId: Long) {

@@ -8,6 +8,7 @@ interface ImageRepository {
     suspend fun getImagesByAlbum(albumId: String): List<GalleryImage>
     suspend fun getAlbums(): List<Album>
     suspend fun getImageById(id: Long, type: com.feraxhp.gallery.model.MediaType): GalleryImage?
+    suspend fun loadFullMetadata(image: GalleryImage): GalleryImage
     suspend fun deleteImage(image: GalleryImage): Boolean
     suspend fun moveImage(image: GalleryImage, albumId: String): GalleryImage?
     suspend fun copyImage(image: GalleryImage): Boolean

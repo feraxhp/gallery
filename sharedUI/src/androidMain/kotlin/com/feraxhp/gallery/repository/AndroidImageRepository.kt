@@ -176,18 +176,13 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
                     }
 
                     val contentUri = ContentUris.withAppendedId(uri, id)
-                    val metadata = if (type == MediaType.IMAGE) {
-                        getExifMetadata(contentUri)
-                    } else {
-                        ExifMetadata()
-                    }
 
                     list.add(
                         GalleryImage(
                             id, contentUri.toString(), name, dateAdded, type, detectedMotionPhoto,
-                            duration, width, height, albumId, albumName, metadata.latitude, metadata.longitude,
-                            metadata.shutterSpeed, dateTaken, metadata.cameraModel, metadata.cameraManufacturer,
-                            metadata.iso, metadata.aperture, metadata.focalLength, size, metadata.software, path
+                            duration, width, height, albumId, albumName, null, null,
+                            null, dateTaken, null, null,
+                            null, null, null, size, null, path
                         )
                     )
                 }
@@ -258,21 +253,16 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
                     val path = if (dataColumn != -1) cursor.getString(dataColumn) else null
                     
                     val contentUri = ContentUris.withAppendedId(uri, id)
-                    val metadata = if (type == MediaType.IMAGE) {
-                        getExifMetadata(contentUri)
-                    } else {
-                        ExifMetadata()
-                    }
 
                     list.add(
                         GalleryImage(
                             id = id, uri = contentUri.toString(), name = name, dateAdded = dateAdded, type = type,
                             isMotionPhoto = false, duration = null, width = width, height = height,
-                            albumId = albumId, albumName = albumName, latitude = metadata.latitude, longitude = metadata.longitude,
-                            shutterSpeed = metadata.shutterSpeed, dateTaken = null,
-                            cameraModel = metadata.cameraModel, cameraManufacturer = metadata.cameraManufacturer,
-                            iso = metadata.iso, aperture = metadata.aperture, focalLength = metadata.focalLength,
-                            size = size, software = metadata.software, path = path
+                            albumId = albumId, albumName = albumName, latitude = null, longitude = null,
+                            shutterSpeed = null, dateTaken = null,
+                            cameraModel = null, cameraManufacturer = null,
+                            iso = null, aperture = null, focalLength = null,
+                            size = size, software = null, path = path
                         )
                     )
                 }
@@ -416,6 +406,26 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
         val selection = "${MediaStore.MediaColumns._ID} = ?"
         val selectionArgs = arrayOf(id.toString())
         queryMedia(uri, selection, selectionArgs, type).firstOrNull()
+    }
+
+    override suspend fun loadFullMetadata(image: GalleryImage): GalleryImage = withContext(Dispatchers.IO) {
+        val uri = Uri.parse(image.uri)
+        val metadata = if (image.type == MediaType.IMAGE) {
+            getExifMetadata(uri)
+        } else {
+            ExifMetadata()
+        }
+        image.copy(
+            latitude = metadata.latitude,
+            longitude = metadata.longitude,
+            shutterSpeed = metadata.shutterSpeed,
+            cameraModel = metadata.cameraModel,
+            cameraManufacturer = metadata.cameraManufacturer,
+            iso = metadata.iso,
+            aperture = metadata.aperture,
+            focalLength = metadata.focalLength,
+            software = metadata.software
+        )
     }
 
     override suspend fun deleteImage(image: GalleryImage): Boolean = withContext(Dispatchers.IO) {

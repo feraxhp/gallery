@@ -53,6 +53,8 @@ fun DetailScreen(
     animatedVisibilityScope: AnimatedVisibilityScope,
     repository: ImageRepository,
     onImageChange: (GalleryImage) -> Unit = {},
+    onLoadMetadata: (GalleryImage) -> Unit = {},
+    isMetadataLoading: Boolean = false,
     onBack: () -> Unit,
     topPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
@@ -61,7 +63,9 @@ fun DetailScreen(
     var showBottomSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(pagerState.currentPage) {
-        onImageChange(images[pagerState.currentPage])
+        val currentImage = images[pagerState.currentPage]
+        onImageChange(currentImage)
+        onLoadMetadata(currentImage)
     }
 
     val isTransitionRunning = animatedVisibilityScope.transition.currentState != animatedVisibilityScope.transition.targetState
@@ -141,6 +145,7 @@ fun DetailScreen(
                 MetadataBottomSheet(
                     image = images[pagerState.currentPage],
                     repository = repository,
+                    isMetadataLoading = isMetadataLoading,
                     onDismiss = { showBottomSheet = false }
                 )
             }
@@ -462,6 +467,7 @@ private fun DetailImageItem(
 private fun MetadataBottomSheet(
     image: GalleryImage,
     repository: ImageRepository,
+    isMetadataLoading: Boolean = false,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
@@ -487,11 +493,22 @@ private fun MetadataBottomSheet(
                 .padding(bottom = 48.dp, start = 16.dp, end = 16.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            Text(
-                text = "Detalles",
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Detalles",
+                    style = MaterialTheme.typography.headlineSmall
+                )
+                if (isMetadataLoading) {
+                    LoadingIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
 
             // --- ETAPA 1: TIEMPO Y UBICACIÓN ---
             

@@ -650,14 +650,20 @@ fun App(
                                     LaunchedEffect(isTargetVisible) {
                                         isDetailActive = isTargetVisible
                                     }
+
+                                    val imagesFromVM by activeActionHandler?.images?.collectAsState() ?: remember { mutableStateOf(key.allImages) }
+                                    val loadingIds by activeActionHandler?.loadingMetadataIds?.collectAsState() ?: remember { mutableStateOf(emptySet<Long>()) }
+
                                     DetailScreen(
-                                        images = key.allImages,
-                                        initialIndex = key.allImages.indexOfFirst { it.id == key.image.id }
+                                        images = imagesFromVM,
+                                        initialIndex = imagesFromVM.indexOfFirst { it.id == key.image.id }
                                             .coerceAtLeast(0),
                                         sharedTransitionScope = this@SharedTransitionLayout,
                                         animatedVisibilityScope = animatedVisibilityScope,
                                         repository = repository,
                                         onImageChange = { currentImageInDetail = it },
+                                        onLoadMetadata = { activeActionHandler?.loadFullMetadata(it) },
+                                        isMetadataLoading = currentImageInDetail?.id in loadingIds,
                                         topPadding = topPadding,
                                         onBack = {
                                             if (backStack.size > 1) {
@@ -749,6 +755,7 @@ fun AppPreview() {
         override suspend fun getImagesByAlbum(albumId: String): List<com.feraxhp.gallery.model.GalleryImage> = emptyList()
         override suspend fun getAlbums(): List<com.feraxhp.gallery.model.Album> = emptyList()
         override suspend fun getImageById(id: Long, type: com.feraxhp.gallery.model.MediaType): com.feraxhp.gallery.model.GalleryImage? = null
+        override suspend fun loadFullMetadata(image: com.feraxhp.gallery.model.GalleryImage): com.feraxhp.gallery.model.GalleryImage = image
         override suspend fun deleteImage(image: com.feraxhp.gallery.model.GalleryImage): Boolean = true
         override suspend fun moveImage(image: com.feraxhp.gallery.model.GalleryImage, albumId: String): com.feraxhp.gallery.model.GalleryImage? = null
         override suspend fun copyImage(image: com.feraxhp.gallery.model.GalleryImage): Boolean = true

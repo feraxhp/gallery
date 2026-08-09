@@ -56,6 +56,9 @@ class GalleryViewModel(
     override fun loadFullMetadata(image: GalleryImage) {
         if (image.id in _loadingMetadataIds.value) return
         
+        // Evitar recarga si ya tenemos metadatos básicos de cámara o ubicación
+        if (image.cameraModel != null || image.latitude != null || image.shutterSpeed != null) return
+
         viewModelScope.launch {
             _loadingMetadataIds.value += image.id
             try {

@@ -14,7 +14,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class GalleryViewModel(private val repository: ImageRepository) : ViewModel(), GalleryActionHandler {
+class GalleryViewModel(
+    private val repository: ImageRepository,
+    private val albumId: String? = null
+) : ViewModel(), GalleryActionHandler {
 
     private val logger = Logger.withTag("GalleryViewModel")
     private val _images = MutableStateFlow<List<GalleryImage>>(emptyList())
@@ -82,11 +85,15 @@ class GalleryViewModel(private val repository: ImageRepository) : ViewModel(), G
     }
 
     fun loadImages() {
-        logger.d { "loadImages called" }
+        logger.d { "loadImages called for albumId: $albumId" }
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val result = repository.getImages()
+                val result = if (albumId != null) {
+                    repository.getImagesByAlbum(albumId)
+                } else {
+                    repository.getImages()
+                }
                 logger.d { "Loaded ${result.size} images" }
                 _images.value = result
             } catch (e: Exception) {
@@ -102,7 +109,11 @@ class GalleryViewModel(private val repository: ImageRepository) : ViewModel(), G
             _isRefreshing.value = true
             try {
                 repository.refreshMedia()
-                val result = repository.getImages()
+                val result = if (albumId != null) {
+                    repository.getImagesByAlbum(albumId)
+                } else {
+                    repository.getImages()
+                }
                 _images.value = result
             } catch (e: Exception) {
                 logger.e(e) { "Error refreshing gallery" }

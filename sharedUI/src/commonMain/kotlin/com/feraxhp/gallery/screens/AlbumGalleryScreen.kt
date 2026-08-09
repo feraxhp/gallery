@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
-import com.feraxhp.gallery.viewmodel.AlbumGalleryViewModel
+import com.feraxhp.gallery.viewmodel.GalleryViewModel
 import com.feraxhp.gallery.components.GalleryGrid
 import com.feraxhp.gallery.components.ShatterEffect
 import com.feraxhp.gallery.model.GalleryImage
@@ -57,7 +57,7 @@ import kotlin.time.Duration.Companion.milliseconds
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun AlbumGalleryScreen(
-    viewModel: AlbumGalleryViewModel,
+    viewModel: GalleryViewModel,
     albumId: String,
     onImageClick: (GalleryImage, List<GalleryImage>) -> Unit,
     sharedTransitionScope: SharedTransitionScope,
@@ -82,7 +82,7 @@ fun AlbumGalleryScreen(
 
     LaunchedEffect(albumId, animatedVisibilityScope.transition.targetState) {
         if (animatedVisibilityScope.transition.targetState == EnterExitState.Visible) {
-            viewModel.loadImages(albumId)
+            viewModel.loadImages()
         }
     }
 
@@ -95,7 +95,7 @@ fun AlbumGalleryScreen(
             images = images,
             isLoading = isLoading,
             isRefreshing = isRefreshing,
-            onRefresh = { viewModel.refreshGallery(albumId) },
+            onRefresh = { viewModel.refreshGallery() },
             onImageClick = onImageClick,
             onToggleSelection = { viewModel.toggleSelection(it.id) },
             onSetSelection = { image, selected -> viewModel.setSelection(image.id, selected) },

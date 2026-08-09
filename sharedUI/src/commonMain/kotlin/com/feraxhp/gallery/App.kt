@@ -123,7 +123,6 @@ import com.feraxhp.gallery.screens.MoveToAlbumScreen
 import com.feraxhp.gallery.screens.PermissionsScreen
 import com.feraxhp.gallery.util.SetSystemBarsColor
 import com.feraxhp.gallery.viewmodel.GalleryViewModel
-import com.feraxhp.gallery.viewmodel.AlbumGalleryViewModel
 import com.feraxhp.gallery.viewmodel.GalleryActionHandler
 import com.feraxhp.ktheme.DynamicTheme
 import kotlinx.coroutines.Job
@@ -618,7 +617,7 @@ fun App(
                                     LaunchedEffect(Unit) { isDetailActive = false }
                                     val animatedVisibilityScope =
                                         LocalNavAnimatedContentScope.current
-                                    val viewModel: AlbumGalleryViewModel = viewModel(key = key.albumId) { AlbumGalleryViewModel(repository) }
+                                    val viewModel: GalleryViewModel = viewModel(key = key.albumId) { GalleryViewModel(repository, key.albumId) }
                                     LaunchedEffect(viewModel) { activeActionHandler = viewModel }
                                     AlbumGalleryScreen(
                                         viewModel = viewModel,

@@ -217,6 +217,7 @@ fun App(
                         val deleteDelay = if (isDetailActive) 1000.milliseconds else 600.milliseconds
                         delay(deleteDelay)
                         imagesToDelete.forEach { handler?.hideImage(it.id) }
+                        handler?.clearDeletedState()
                         
                         handler?.clearSelection()
                         
@@ -230,6 +231,7 @@ fun App(
                         if (result == SnackbarResult.ActionPerformed) {
                             // Si se pulsa Undo, volvemos a mostrarlas
                             imagesToDelete.forEach { handler?.restoreImage(it.id) }
+                            handler?.clearDeletedState()
                             if (isDetailActive) {
                                 backStack = currentBackstack
                             }

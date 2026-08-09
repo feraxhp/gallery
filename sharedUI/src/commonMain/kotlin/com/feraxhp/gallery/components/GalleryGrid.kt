@@ -94,29 +94,36 @@ fun GalleryGrid(
     val currentSelectedImageIds by rememberUpdatedState(selectedImageIds)
     
     LaunchedEffect(deletedImageIds) {
-        if (deletedImageIds.isNotEmpty()) {
-            val targetId = currentImages.find { it.id in deletedImageIds }?.id
-            if (targetId == null) {
-                onClearDeletedState()
-                return@LaunchedEffect
-            }
-            
-            val gatherMap = mutableMapOf<Long, ShatterData>()
-            deletedImageIds.forEach { id ->
-                val bounds = imageBounds[id]
-                val bitmap = imageBitmaps[id]
-                if (bounds != null && bitmap != null) {
-                    gatherMap[id] = ShatterData(
-                        bitmap = bitmap,
-                        offset = IntOffset(bounds.left.toInt(), bounds.top.toInt()),
-                        size = IntSize(bounds.width.toInt(), bounds.height.toInt())
-                    )
-                }
-            }
-            
-            gatheringTargetId = targetId
+        if (deletedImageIds.isEmpty()) {
+            imagesToGather = emptyMap()
+            activeShatterEffects = emptyMap()
+            gatheringProgress.snapTo(0f)
+            return@LaunchedEffect
+        }
 
-            if (gatherMap.isNotEmpty()) {
+        val targetId = currentImages.find { it.id in deletedImageIds }?.id
+        if (targetId == null) {
+            onClearDeletedState()
+            return@LaunchedEffect
+        }
+        
+        val gatherMap = mutableMapOf<Long, ShatterData>()
+        deletedImageIds.forEach { id ->
+            val bounds = imageBounds[id]
+            val bitmap = imageBitmaps[id]
+            if (bounds != null && bitmap != null) {
+                gatherMap[id] = ShatterData(
+                    bitmap = bitmap,
+                    offset = IntOffset(bounds.left.toInt(), bounds.top.toInt()),
+                    size = IntSize(bounds.width.toInt(), bounds.height.toInt())
+                )
+            }
+        }
+        
+        gatheringTargetId = targetId
+
+        if (gatherMap.isNotEmpty()) {
+            try {
                 if (isDeletedFromDetail) {
                     // Caso 1: Borrado desde Detail - Sin animación de reunión
                     snapshotFlow { animatedVisibilityScope.transition.currentState == EnterExitState.Visible }
@@ -167,13 +174,11 @@ fun GalleryGrid(
                     
                     gatheringJob.join()
                 }
-                
-                // Limpiar estado de reunión
+            } finally {
+                // Limpiar estado de reunión local al terminar o si se cancela (Undo)
                 imagesToGather = emptyMap()
                 gatheringProgress.snapTo(0f)
             }
-            
-            onClearDeletedState()
         }
     }
 
@@ -291,6 +296,7 @@ fun GalleryGrid(
                         }
                         items(imagesInDate, key = { it.id }) { image ->
                             val isGathering = image.id in imagesToGather
+                            val isDeleted = image.id in deletedImageIds
                             GalleryImageTile(
                                 image = image,
                                 allImages = images,
@@ -308,7 +314,7 @@ fun GalleryGrid(
                                 animatedVisibilityScope = animatedVisibilityScope,
                                 modifier = Modifier
                                     .animateItem()
-                                    .alpha(if (isGathering) 0f else 1f)
+                                    .alpha(if (isGathering || isDeleted) 0f else 1f)
                             )
                         }
                     }

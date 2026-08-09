@@ -96,7 +96,11 @@ fun GalleryGrid(
     LaunchedEffect(deletedImageIds) {
         if (deletedImageIds.isEmpty()) {
             imagesToGather = emptyMap()
-            activeShatterEffects = emptyMap()
+            // Solo limpiamos los efectos de shatter si la imagen ha vuelto a la galería (Undo).
+            // Si la imagen ya no está en 'images', dejamos que el ShatterEffect termine su animación naturalmente.
+            val currentVisibleIds = currentImages.map { it.id }.toSet()
+            activeShatterEffects = activeShatterEffects.filterKeys { it !in currentVisibleIds }
+            
             gatheringProgress.snapTo(0f)
             return@LaunchedEffect
         }

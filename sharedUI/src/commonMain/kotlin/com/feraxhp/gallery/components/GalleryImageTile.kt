@@ -32,11 +32,14 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.graphics.shapes.RoundedPolygon
 import coil3.compose.AsyncImage
@@ -230,6 +233,30 @@ fun GalleryImageTile(
                     ),
                 contentScale = ContentScale.Crop
             )
+
+
+            Text(
+                text = "${image.albumName}",
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Normal,
+                ),
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(8.dp)
+                    .widthIn(max = 64.dp)
+                    .background(
+                        MaterialTheme.colorScheme.secondaryContainer,
+                        CircleShape
+                    )
+                    .padding(2.dp)
+                    .padding(horizontal = 4.dp)
+                ,
+            )
+
 
             if (image.type == MediaType.VIDEO) {
                 Box(

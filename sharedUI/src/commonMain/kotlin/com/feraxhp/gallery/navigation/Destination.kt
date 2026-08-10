@@ -13,6 +13,8 @@ sealed interface Destination {
     @Serializable
     data class AlbumGallery(val albumId: String, val albumName: String) : Destination
     @Serializable
+    data class ExternalDetail(val uri: String) : Destination
+    @Serializable
     data class Detail(
         val image: com.feraxhp.gallery.model.GalleryImage,
         val allImages: List<com.feraxhp.gallery.model.GalleryImage>

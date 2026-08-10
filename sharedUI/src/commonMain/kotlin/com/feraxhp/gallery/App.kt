@@ -67,6 +67,7 @@ import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
@@ -157,12 +158,8 @@ fun App(
 
     LaunchedEffect(initialMediaUri, hasReadPermission, hasWritePermission) {
         if (initialMediaUri != null && hasReadPermission && hasWritePermission) {
-            val image = repository.getImageByUri(initialMediaUri)
-            if (image != null) {
-                // Navegamos al detalle. Como no tenemos el contexto de "todas las imágenes" 
-                // para este archivo externo, pasamos solo la lista con él mismo.
-                backStack = listOf(Destination.Gallery, Destination.Detail(image, listOf(image)))
-            }
+            // Navegamos al detalle externo instantáneamente
+            backStack = listOf(Destination.Gallery, Destination.ExternalDetail(initialMediaUri))
             onUriConsumed()
         }
     }
@@ -589,6 +586,25 @@ fun App(
                                             backStack = listOf(Destination.Gallery)
                                         }
                                     )
+                                }
+
+                                is Destination.ExternalDetail -> NavEntry(key) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize().background(Color.Black),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+                                    }
+                                    LaunchedEffect(key.uri) {
+                                        val image = repository.getImageByUri(key.uri)
+                                        if (image != null) {
+                                            // Reemplazamos ExternalDetail con el Detail real una vez cargada la imagen
+                                            backStack = backStack.dropLast(1) + Destination.Detail(image, listOf(image))
+                                        } else {
+                                            // Si falla la carga, volvemos a la galería
+                                            backStack = listOf(Destination.Gallery)
+                                        }
+                                    }
                                 }
 
                                 Destination.Gallery -> NavEntry(key) {

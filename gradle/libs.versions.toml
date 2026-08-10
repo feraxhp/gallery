@@ -18,6 +18,7 @@ room = "2.8.4"
 ksp = "2.3.9"
 ktheme = "0.1.0"
 ktor = "3.0.3"
+androidx-core-splashscreen = "1.2.0"
 
 [libraries]
 
@@ -54,6 +55,7 @@ room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 ktheme = { module = "com.feraxhp.ktheme:ktheme-compose", version.ref = "ktheme" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "androidx-core-splashscreen" }
 
 [plugins]
 

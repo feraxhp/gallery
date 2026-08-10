@@ -62,10 +62,12 @@ fun DetailScreen(
     val scope = rememberCoroutineScope()
     var showBottomSheet by remember { mutableStateOf(false) }
 
-    LaunchedEffect(pagerState.currentPage) {
-        val currentImage = images[pagerState.currentPage]
-        onImageChange(currentImage)
-        onLoadMetadata(currentImage)
+    LaunchedEffect(pagerState.currentPage, images) {
+        if (images.isNotEmpty() && pagerState.currentPage in images.indices) {
+            val currentImage = images[pagerState.currentPage]
+            onImageChange(currentImage)
+            onLoadMetadata(currentImage)
+        }
     }
 
     val isTransitionRunning = animatedVisibilityScope.transition.currentState != animatedVisibilityScope.transition.targetState
@@ -336,7 +338,7 @@ private fun DetailImageItem(
                     modifier = Modifier
                         .fillMaxSize()
                         .then(
-                            if (showAspectRatio) {
+                            if (showAspectRatio && image.width > 0 && image.height > 0) {
                                 Modifier
                                     .wrapContentSize(Alignment.Center)
                                     .aspectRatio(image.aspectRatio)
@@ -362,7 +364,7 @@ private fun DetailImageItem(
                                     )
                                 } else Modifier
                             ),
-                        contentScale = if (showAspectRatio) ContentScale.Crop else ContentScale.Fit
+                        contentScale = if (showAspectRatio && image.width > 0 && image.height > 0) ContentScale.Crop else ContentScale.Fit
                     )
 
                     AnimatedVisibility(

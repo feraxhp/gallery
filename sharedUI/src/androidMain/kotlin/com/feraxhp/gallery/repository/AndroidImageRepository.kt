@@ -4,6 +4,8 @@ import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
@@ -24,6 +26,9 @@ import java.io.IOException
 import java.io.OutputStream
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
+
+private val VIDEO_EXTENSIONS = listOf("mp4", "mkv", "mov", "avi", "3gp", "webm")
+private val IMAGE_EXTENSIONS = listOf("jpg", "jpeg", "png", "webp", "heic", "heif")
 
 class AndroidImageRepository(private val context: Context) : ImageRepository {
     override suspend fun getImages(): List<GalleryImage> = getImagesInternal(null, null)
@@ -312,8 +317,13 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
 
     private fun getExifMetadata(uri: android.net.Uri): ExifMetadata {
         return try {
-            val photoUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                MediaStore.setRequireOriginal(uri)
+            val isMediaStoreUri = uri.authority == MediaStore.AUTHORITY
+            val photoUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && isMediaStoreUri) {
+                try {
+                    MediaStore.setRequireOriginal(uri)
+                } catch (e: Exception) {
+                    uri
+                }
             } else {
                 uri
             }
@@ -406,6 +416,95 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
         val selection = "${MediaStore.MediaColumns._ID} = ?"
         val selectionArgs = arrayOf(id.toString())
         queryMedia(uri, selection, selectionArgs, type).firstOrNull()
+    }
+
+    override suspend fun getImageByUri(uri: String): GalleryImage? = withContext(Dispatchers.IO) {
+        val contentUri = Uri.parse(uri)
+        
+        // 1. Intentar encontrarlo en MediaStore por ID si es una URI de MediaStore
+        try {
+            val id = ContentUris.parseId(contentUri)
+            val type = if (uri.contains("video")) MediaType.VIDEO else MediaType.IMAGE
+            getImageById(id, type)?.let { return@withContext it }
+        } catch (e: Exception) {
+            // No es una URI con ID numérico parseable o no está en MediaStore
+        }
+
+        // 2. Si no está en MediaStore, intentar resolver metadatos básicos de la URI
+        try {
+            context.contentResolver.query(contentUri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameColumn = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+                    val sizeColumn = cursor.getColumnIndex(MediaStore.MediaColumns.SIZE)
+                    val mimeTypeColumn = cursor.getColumnIndex(MediaStore.MediaColumns.MIME_TYPE)
+                    val dataColumn = cursor.getColumnIndex(MediaStore.MediaColumns.DATA)
+                    
+                    val name = if (nameColumn != -1) cursor.getString(nameColumn) else null
+                    val size = if (sizeColumn != -1) cursor.getLong(sizeColumn) else null
+                    val mimeType = if (mimeTypeColumn != -1) cursor.getString(mimeTypeColumn) else null
+                    val path = if (dataColumn != -1) cursor.getString(dataColumn) else null
+                    
+                    var width = 0
+                    var height = 0
+                    
+                    try {
+                        if (mimeType?.startsWith("video") == true || uri.contains("video")) {
+                            val retriever = MediaMetadataRetriever()
+                            try {
+                                retriever.setDataSource(context, contentUri)
+                                width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toInt() ?: 0
+                                height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toInt() ?: 0
+                                val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toInt() ?: 0
+                                if (rotation == 90 || rotation == 270) {
+                                    val temp = width
+                                    width = height
+                                    height = temp
+                                }
+                            } finally {
+                                retriever.release()
+                            }
+                        } else {
+                            context.contentResolver.openInputStream(contentUri)?.use { input ->
+                                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                                BitmapFactory.decodeStream(input, null, options)
+                                width = options.outWidth
+                                height = options.outHeight
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("GalleryRepo", "Error extracting dimensions for external URI: ${e.message}")
+                    }
+
+                    val isVideoByExtension = VIDEO_EXTENSIONS.any { uri.lowercase().contains(".$it") || name?.lowercase()?.endsWith(".$it") == true }
+                    val type = if (mimeType?.startsWith("video") == true || isVideoByExtension) MediaType.VIDEO else MediaType.IMAGE
+                    
+                    return@withContext GalleryImage(
+                        id = -1, // ID temporal
+                        uri = uri,
+                        name = name ?: uri.substringAfterLast('/'),
+                        dateAdded = System.currentTimeMillis() / 1000,
+                        type = type,
+                        width = width,
+                        height = height,
+                        size = size,
+                        path = path
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("GalleryRepo", "Error resolving external URI: ${e.message}")
+        }
+
+        // 3. Último recurso: crear objeto básico con lo que tenemos
+        val isVideoByExtension = VIDEO_EXTENSIONS.any { uri.lowercase().contains(".$it") }
+        val type = if (uri.contains("video") || isVideoByExtension) MediaType.VIDEO else MediaType.IMAGE
+        GalleryImage(
+            id = -2,
+            uri = uri,
+            name = uri.substringAfterLast('/'),
+            dateAdded = System.currentTimeMillis() / 1000,
+            type = type
+        )
     }
 
     override suspend fun loadFullMetadata(image: GalleryImage): GalleryImage = withContext(Dispatchers.IO) {
@@ -558,10 +657,11 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
         )
         
         val filesToScan = mutableListOf<String>()
+        val allSupportedExtensions = VIDEO_EXTENSIONS + IMAGE_EXTENSIONS
         rootPaths.forEach { root ->
             if (root.exists()) {
                 root.walkTopDown().filter { 
-                    it.isFile && (it.extension.lowercase() in listOf("jpg", "jpeg", "png", "webp", "mp4", "mkv", "mov")) 
+                    it.isFile && (it.extension.lowercase() in allSupportedExtensions) 
                 }
                 .take(500)
                 .forEach { filesToScan.add(it.absolutePath) }

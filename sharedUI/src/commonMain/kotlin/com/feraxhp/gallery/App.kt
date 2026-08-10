@@ -141,6 +141,8 @@ fun App(
     repository: ImageRepository,
     hasReadPermission: Boolean,
     hasWritePermission: Boolean,
+    initialMediaUri: String? = null,
+    onUriConsumed: () -> Unit = {},
     onRequestReadPermission: () -> Unit,
     onRequestWritePermission: () -> Unit
 ) {
@@ -151,6 +153,18 @@ fun App(
                 if (hasReadPermission && hasWritePermission) Destination.Gallery else Destination.Permissions
             )
         )
+    }
+
+    LaunchedEffect(initialMediaUri, hasReadPermission, hasWritePermission) {
+        if (initialMediaUri != null && hasReadPermission && hasWritePermission) {
+            val image = repository.getImageByUri(initialMediaUri)
+            if (image != null) {
+                // Navegamos al detalle. Como no tenemos el contexto de "todas las imágenes" 
+                // para este archivo externo, pasamos solo la lista con él mismo.
+                backStack = listOf(Destination.Gallery, Destination.Detail(image, listOf(image)))
+            }
+            onUriConsumed()
+        }
     }
 
     val currentReadPermission by rememberUpdatedState(hasReadPermission)
@@ -651,12 +665,15 @@ fun App(
                                         isDetailActive = isTargetVisible
                                     }
 
-                                    val imagesFromVM by activeActionHandler?.images?.collectAsState() ?: remember { mutableStateOf(key.allImages) }
+                                    val vmImages by activeActionHandler?.images?.collectAsState() ?: remember { mutableStateOf(emptyList<GalleryImage>()) }
+                                    val imagesToShow = remember(vmImages, key.image, key.allImages) {
+                                        if (vmImages.any { it.id == key.image.id }) vmImages else key.allImages
+                                    }
                                     val loadingIds by activeActionHandler?.loadingMetadataIds?.collectAsState() ?: remember { mutableStateOf(emptySet<Long>()) }
 
                                     DetailScreen(
-                                        images = imagesFromVM,
-                                        initialIndex = imagesFromVM.indexOfFirst { it.id == key.image.id }
+                                        images = imagesToShow,
+                                        initialIndex = imagesToShow.indexOfFirst { it.id == key.image.id }
                                             .coerceAtLeast(0),
                                         sharedTransitionScope = this@SharedTransitionLayout,
                                         animatedVisibilityScope = animatedVisibilityScope,
@@ -759,6 +776,7 @@ fun AppPreview() {
         override suspend fun deleteImage(image: com.feraxhp.gallery.model.GalleryImage): Boolean = true
         override suspend fun moveImage(image: com.feraxhp.gallery.model.GalleryImage, albumId: String): com.feraxhp.gallery.model.GalleryImage? = null
         override suspend fun copyImage(image: com.feraxhp.gallery.model.GalleryImage): Boolean = true
+        override suspend fun getImageByUri(uri: String): GalleryImage? { return null }
         override fun openInFileManager(path: String) {}
         override fun shareImage(image: com.feraxhp.gallery.model.GalleryImage) {}
         override fun shareImages(images: List<GalleryImage>) {}
@@ -769,6 +787,8 @@ fun AppPreview() {
         repository = mockRepository,
         hasReadPermission = true,
         hasWritePermission = true,
+        initialMediaUri = null,
+        onUriConsumed = {},
         onRequestReadPermission = {},
         onRequestWritePermission = {}
     )

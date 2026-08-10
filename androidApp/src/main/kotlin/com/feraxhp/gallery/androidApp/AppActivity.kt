@@ -38,9 +38,12 @@ import com.feraxhp.gallery.App
 import com.feraxhp.gallery.repository.AndroidImageRepository
 
 class AppActivity : ComponentActivity() {
+    private var initialUri by mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        handleIntent(intent)
         enableEdgeToEdge()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
@@ -131,6 +134,8 @@ class AppActivity : ComponentActivity() {
                 repository = repository,
                 hasReadPermission = hasReadPermission,
                 hasWritePermission = hasWritePermission,
+                initialMediaUri = initialUri,
+                onUriConsumed = { initialUri = null },
                 onRequestReadPermission = {
                     readLauncher.launch(readPermissions)
                 },
@@ -145,6 +150,17 @@ class AppActivity : ComponentActivity() {
                     }
                 }
             )
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_VIEW) {
+            initialUri = intent.dataString
         }
     }
 }

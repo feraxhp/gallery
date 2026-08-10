@@ -159,7 +159,11 @@ class AppActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        if (intent?.action == Intent.ACTION_VIEW) {
+        val action = intent?.action
+        if (action == Intent.ACTION_VIEW ||
+            action == "com.android.camera.action.REVIEW" ||
+            action == "android.provider.MediaStore.ACTION_REVIEW"
+        ) {
             initialUri = intent.dataString
         }
     }

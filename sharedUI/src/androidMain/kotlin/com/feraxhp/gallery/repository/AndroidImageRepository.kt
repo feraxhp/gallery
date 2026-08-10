@@ -26,6 +26,7 @@ import java.io.IOException
 import java.io.OutputStream
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
+import kotlin.time.Duration.Companion.milliseconds
 
 private val VIDEO_EXTENSIONS = listOf("mp4", "mkv", "mov", "avi", "3gp", "webm")
 private val IMAGE_EXTENSIONS = listOf("jpg", "jpeg", "png", "webp", "heic", "heif")
@@ -322,6 +323,7 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
                 try {
                     MediaStore.setRequireOriginal(uri)
                 } catch (e: Exception) {
+                    Log.w("GalleryRepo", "Could not setRequireOriginal for EXIF (item might be pending): ${e.message}")
                     uri
                 }
             } else {
@@ -420,79 +422,92 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
 
     override suspend fun getImageByUri(uri: String): GalleryImage? = withContext(Dispatchers.IO) {
         val contentUri = Uri.parse(uri)
-        
-        // 1. Intentar encontrarlo en MediaStore por ID si es una URI de MediaStore
-        try {
-            val id = ContentUris.parseId(contentUri)
-            val type = if (uri.contains("video")) MediaType.VIDEO else MediaType.IMAGE
-            getImageById(id, type)?.let { return@withContext it }
-        } catch (e: Exception) {
-            // No es una URI con ID numérico parseable o no está en MediaStore
-        }
+        val maxAttempts = 5
 
-        // 2. Si no está en MediaStore, intentar resolver metadatos básicos de la URI
-        try {
-            context.contentResolver.query(contentUri, null, null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val nameColumn = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
-                    val sizeColumn = cursor.getColumnIndex(MediaStore.MediaColumns.SIZE)
-                    val mimeTypeColumn = cursor.getColumnIndex(MediaStore.MediaColumns.MIME_TYPE)
-                    val dataColumn = cursor.getColumnIndex(MediaStore.MediaColumns.DATA)
-                    
-                    val name = if (nameColumn != -1) cursor.getString(nameColumn) else null
-                    val size = if (sizeColumn != -1) cursor.getLong(sizeColumn) else null
-                    val mimeType = if (mimeTypeColumn != -1) cursor.getString(mimeTypeColumn) else null
-                    val path = if (dataColumn != -1) cursor.getString(dataColumn) else null
-                    
-                    var width = 0
-                    var height = 0
-                    
-                    try {
-                        if (mimeType?.startsWith("video") == true || uri.contains("video")) {
-                            val retriever = MediaMetadataRetriever()
-                            try {
-                                retriever.setDataSource(context, contentUri)
-                                width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toInt() ?: 0
-                                height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toInt() ?: 0
-                                val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toInt() ?: 0
-                                if (rotation == 90 || rotation == 270) {
-                                    val temp = width
-                                    width = height
-                                    height = temp
+        for (attempt in 1..maxAttempts) {
+            // 1. Intentar encontrarlo en MediaStore por ID si es una URI de MediaStore
+            try {
+                val id = ContentUris.parseId(contentUri)
+                val type = if (uri.contains("video")) MediaType.VIDEO else MediaType.IMAGE
+                getImageById(id, type)?.let { return@withContext it }
+            } catch (e: Exception) {
+                // No es una URI con ID numérico parseable o no está en MediaStore
+            }
+
+            // 2. Si no está en MediaStore o falló, intentar resolver metadatos básicos de la URI
+            try {
+                context.contentResolver.query(contentUri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameColumn = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+                        val sizeColumn = cursor.getColumnIndex(MediaStore.MediaColumns.SIZE)
+                        val mimeTypeColumn = cursor.getColumnIndex(MediaStore.MediaColumns.MIME_TYPE)
+                        val dataColumn = cursor.getColumnIndex(MediaStore.MediaColumns.DATA)
+                        
+                        val name = if (nameColumn != -1) cursor.getString(nameColumn) else null
+                        val size = if (sizeColumn != -1) cursor.getLong(sizeColumn) else null
+                        val mimeType = if (mimeTypeColumn != -1) cursor.getString(mimeTypeColumn) else null
+                        val path = if (dataColumn != -1) cursor.getString(dataColumn) else null
+                        
+                        var width = 0
+                        var height = 0
+                        
+                        try {
+                            if (mimeType?.startsWith("video") == true || uri.contains("video")) {
+                                val retriever = MediaMetadataRetriever()
+                                try {
+                                    retriever.setDataSource(context, contentUri)
+                                    width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toInt() ?: 0
+                                    height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toInt() ?: 0
+                                    val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toInt() ?: 0
+                                    if (rotation == 90 || rotation == 270) {
+                                        val temp = width
+                                        width = height
+                                        height = temp
+                                    }
+                                } finally {
+                                    retriever.release()
                                 }
-                            } finally {
-                                retriever.release()
+                            } else {
+                                context.contentResolver.openInputStream(contentUri)?.use { input ->
+                                    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                                    BitmapFactory.decodeStream(input, null, options)
+                                    width = options.outWidth
+                                    height = options.outHeight
+                                }
                             }
-                        } else {
-                            context.contentResolver.openInputStream(contentUri)?.use { input ->
-                                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                                BitmapFactory.decodeStream(input, null, options)
-                                width = options.outWidth
-                                height = options.outHeight
+                        } catch (e: Exception) {
+                            Log.e("GalleryRepo", "Error extracting dimensions for external URI: ${e.message}")
+                            if (e.message?.contains("pending", ignoreCase = true) == true) {
+                                throw e // Forzamos el catch externo para reintentar
                             }
                         }
-                    } catch (e: Exception) {
-                        Log.e("GalleryRepo", "Error extracting dimensions for external URI: ${e.message}")
-                    }
 
-                    val isVideoByExtension = VIDEO_EXTENSIONS.any { uri.lowercase().contains(".$it") || name?.lowercase()?.endsWith(".$it") == true }
-                    val type = if (mimeType?.startsWith("video") == true || isVideoByExtension) MediaType.VIDEO else MediaType.IMAGE
-                    
-                    return@withContext GalleryImage(
-                        id = -1, // ID temporal
-                        uri = uri,
-                        name = name ?: uri.substringAfterLast('/'),
-                        dateAdded = System.currentTimeMillis() / 1000,
-                        type = type,
-                        width = width,
-                        height = height,
-                        size = size,
-                        path = path
-                    )
+                        val isVideoByExtension = VIDEO_EXTENSIONS.any { uri.lowercase().contains(".$it") || name?.lowercase()?.endsWith(".$it") == true }
+                        val type = if (mimeType?.startsWith("video") == true || isVideoByExtension) MediaType.VIDEO else MediaType.IMAGE
+                        
+                        return@withContext GalleryImage(
+                            id = -1, // ID temporal
+                            uri = uri,
+                            name = name ?: uri.substringAfterLast('/'),
+                            dateAdded = System.currentTimeMillis() / 1000,
+                            type = type,
+                            width = width,
+                            height = height,
+                            size = size,
+                            path = path
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("GalleryRepo", "Attempt $attempt: Error resolving external URI (could be pending): ${e.message}")
+                if (attempt < maxAttempts && e.message?.contains("pending", ignoreCase = true) == true) {
+                    kotlinx.coroutines.delay(500.milliseconds)
+                    continue
                 }
             }
-        } catch (e: Exception) {
-            Log.e("GalleryRepo", "Error resolving external URI: ${e.message}")
+            
+            // Si llegamos aquí y no es un error de "pending", salimos del bucle
+            break
         }
 
         // 3. Último recurso: crear objeto básico con lo que tenemos
@@ -506,6 +521,8 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
             type = type
         )
     }
+
+
 
     override suspend fun loadFullMetadata(image: GalleryImage): GalleryImage = withContext(Dispatchers.IO) {
         val uri = Uri.parse(image.uri)

@@ -15,4 +15,4 @@ Pods/
 *.jks
 *.gpg
 *yarn.lock
-androidApp/release
+androidApp/release/

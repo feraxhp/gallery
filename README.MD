@@ -9,7 +9,7 @@ and user expiriense.
 > I have been working on this project with help of AI 
 > and checked its code on every iteration.
 > 
-> > _"AI is a multiplier for every one"_ - ThePrimeagen
+> > _"...AI is a multiplier for every one..."_ - ThePrimeagen
 
 ### Android
 To run the application on android device/emulator:  

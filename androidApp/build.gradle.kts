@@ -15,7 +15,7 @@ android {
 
         applicationId = "com.feraxhp.gallery.androidApp"
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "0.1.1"
     }
 
     compileOptions {

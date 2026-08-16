@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PhotoAlbum
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
@@ -126,18 +128,27 @@ fun AlbumsScreen(
                                     .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                                 contentAlignment = Alignment.Center
                             ) {
-                                LoadingIndicator(
-                                    modifier = Modifier.size(48.dp),
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                                )
-                                AsyncImage(
-                                    model = model,
-                                    contentDescription = album.name,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(MaterialTheme.shapes.extraLarge),
-                                    contentScale = ContentScale.Crop
-                                )
+                                if (album.coverUri.isEmpty()) {
+                                    Icon(
+                                        imageVector = Icons.Default.PhotoAlbum,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(48.dp),
+                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                                    )
+                                } else {
+                                    LoadingIndicator(
+                                        modifier = Modifier.size(48.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                                    )
+                                    AsyncImage(
+                                        model = model,
+                                        contentDescription = album.name,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(MaterialTheme.shapes.extraLarge),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
                             }
                             Text(
                                 text = album.name,

@@ -48,4 +48,18 @@ class AlbumsViewModel(private val repository: ImageRepository) : ViewModel() {
             }
         }
     }
+
+    fun createAlbum(name: String, onCreated: (Album) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val album = repository.createAlbum(name)
+                if (album != null) {
+                    onCreated(album)
+                    loadAlbums()
+                }
+            } catch (e: Exception) {
+                logger.e(e) { "Error creating album" }
+            }
+        }
+    }
 }

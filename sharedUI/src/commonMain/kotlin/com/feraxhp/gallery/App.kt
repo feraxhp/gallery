@@ -113,6 +113,7 @@ import androidx.media3.common.util.Log
 import androidx.media3.common.util.UnstableApi
 import co.touchlab.kermit.Logger
 import com.feraxhp.gallery.components.NavigationItem
+import com.feraxhp.gallery.model.Album
 import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.navigation.Destination
 import com.feraxhp.gallery.repository.ImageRepository
@@ -792,6 +793,8 @@ fun AppPreview() {
         override suspend fun deleteImage(image: com.feraxhp.gallery.model.GalleryImage): Boolean = true
         override suspend fun moveImage(image: com.feraxhp.gallery.model.GalleryImage, albumId: String): com.feraxhp.gallery.model.GalleryImage? = null
         override suspend fun copyImage(image: com.feraxhp.gallery.model.GalleryImage): Boolean = true
+        override suspend fun createAlbum(name: String): Album? { return null }
+
         override suspend fun getImageByUri(uri: String): GalleryImage? { return null }
         override fun openInFileManager(path: String) {}
         override fun shareImage(image: com.feraxhp.gallery.model.GalleryImage) {}

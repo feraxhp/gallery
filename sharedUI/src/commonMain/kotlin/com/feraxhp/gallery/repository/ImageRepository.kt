@@ -13,6 +13,7 @@ interface ImageRepository {
     suspend fun deleteImage(image: GalleryImage): Boolean
     suspend fun moveImage(image: GalleryImage, albumId: String): GalleryImage?
     suspend fun copyImage(image: GalleryImage): Boolean
+    suspend fun createAlbum(name: String): Album?
     fun openInFileManager(path: String)
     fun shareImage(image: GalleryImage)
     fun shareImages(images: List<GalleryImage>)

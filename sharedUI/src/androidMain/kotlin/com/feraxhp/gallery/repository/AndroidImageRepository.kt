@@ -281,6 +281,8 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
 
     override suspend fun getAlbums(): List<Album> = withContext(Dispatchers.IO) {
         val albums = mutableMapOf<String, Album>()
+        
+        // 1. Get albums with media from MediaStore
         fun processUri(uri: android.net.Uri) {
             val projection = arrayOf(
                 MediaStore.MediaColumns.BUCKET_ID,
@@ -313,7 +315,29 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
         }
         processUri(MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
         processUri(MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
-        albums.values.toList()
+
+        // 2. Scan filesystem for empty albums in common locations
+        val roots = listOf(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+        )
+        
+        roots.forEach { root ->
+            if (root.exists() && root.isDirectory) {
+                root.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") }?.forEach { dir ->
+                    val bucketId = dir.absolutePath.lowercase().hashCode().toString()
+                    if (!albums.containsKey(bucketId)) {
+                        // It's an empty album or one not detected by MediaStore yet
+                        albums[bucketId] = Album(bucketId, dir.name, "", 0)
+                    }
+                }
+            }
+        }
+
+        albums.values.sortedWith(
+            compareByDescending<Album> { it.imageCount > 0 }
+                .thenBy { it.name }
+        )
     }
 
     private fun getExifMetadata(uri: android.net.Uri): ExifMetadata {
@@ -665,6 +689,27 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
         // Similar a copyImage pero al álbum específico
         // Implementación simplificada
         copyImage(image) // Por ahora solo duplica
+    }
+
+    override suspend fun createAlbum(name: String): Album? = withContext(Dispatchers.IO) {
+        try {
+            val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+            val newAlbumDir = File(picturesDir, name)
+            if (!newAlbumDir.exists()) {
+                if (newAlbumDir.mkdirs()) {
+                    val bucketId = newAlbumDir.absolutePath.lowercase().hashCode().toString()
+                    return@withContext Album(bucketId, name, "", 0)
+                }
+            } else {
+                // Si ya existe, devolvemos el álbum existente (vacío o no)
+                val bucketId = newAlbumDir.absolutePath.lowercase().hashCode().toString()
+                return@withContext Album(bucketId, name, "", 0)
+            }
+            null
+        } catch (e: Exception) {
+            Log.e("GalleryRepo", "Error creating album: ${e.message}")
+            null
+        }
     }
 
     override suspend fun refreshMedia() = withContext(Dispatchers.IO) {

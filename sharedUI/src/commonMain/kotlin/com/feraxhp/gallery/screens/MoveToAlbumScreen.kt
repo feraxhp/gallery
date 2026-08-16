@@ -1,9 +1,13 @@
 package com.feraxhp.gallery.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,8 +33,45 @@ fun MoveToAlbumScreen(
     val albums by viewModel.albums.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
+    var showCreateAlbumDialog by remember { mutableStateOf(false) }
+    var newAlbumName by remember { mutableStateOf("") }
+
     LaunchedEffect(Unit) {
         viewModel.loadAlbums()
+    }
+
+    if (showCreateAlbumDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreateAlbumDialog = false },
+            title = { Text("Nuevo álbum") },
+            text = {
+                TextField(
+                    value = newAlbumName,
+                    onValueChange = { newAlbumName = it },
+                    placeholder = { Text("Nombre del álbum") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (newAlbumName.isNotBlank()) {
+                            viewModel.createAlbum(newAlbumName) { album ->
+                                onAlbumSelected(album)
+                            }
+                            showCreateAlbumDialog = false
+                        }
+                    }
+                ) {
+                    Text("Crear")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateAlbumDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
     }
 
     Surface(
@@ -52,6 +93,36 @@ fun MoveToAlbumScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showCreateAlbumDialog = true }
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(MaterialTheme.shapes.small)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CreateNewFolder,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        Text(
+                            text = "Crear nuevo álbum",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(start = 16.dp)
+                        )
+                    }
+                }
+
                 items(albums, key = { it.id }) { album ->
                     Row(
                         modifier = Modifier
@@ -65,14 +136,31 @@ fun MoveToAlbumScreen(
                         } else {
                             album.coverUri
                         }
-                        AsyncImage(
-                            model = model,
-                            contentDescription = album.name,
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clip(MaterialTheme.shapes.small),
-                            contentScale = ContentScale.Crop
-                        )
+                        if (album.coverUri.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(MaterialTheme.shapes.small)
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PhotoLibrary,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(32.dp),
+                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                                )
+                            }
+                        } else {
+                            AsyncImage(
+                                model = model,
+                                contentDescription = album.name,
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(MaterialTheme.shapes.small),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
                         Column(
                             modifier = Modifier.padding(start = 16.dp)
                         ) {

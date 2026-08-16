@@ -178,6 +178,9 @@ fun App(
 
     val currentDestination = backStack.lastOrNull()
     var isDetailActive by remember { mutableStateOf(false) }
+    var isProcessingAction by remember { mutableStateOf(false) }
+    var actionProgress by remember { mutableStateOf(0f) }
+    var actionProgressText by remember { mutableStateOf("") }
     var currentImageInDetail by remember {
         mutableStateOf<com.feraxhp.gallery.model.GalleryImage?>(
             null
@@ -711,19 +714,31 @@ fun App(
                                     MoveToAlbumScreen(
                                         repository = repository,
                                         topPadding = topPadding,
+                                        isProcessing = isProcessingAction,
+                                        progress = actionProgress,
+                                        progressText = actionProgressText,
                                         onAlbumSelected = { album ->
                                             scope.launch {
+                                                isProcessingAction = true
+                                                val total = key.images.size
                                                 val handler = activeActionHandler
                                                 val originalImagesState = key.images.map { it.id to it.albumId }
                                                 
-                                                val results = key.images.map { image ->
-                                                    image to repository.moveImage(image, album.id)
+                                                val updatedImages = mutableListOf<com.feraxhp.gallery.model.GalleryImage>()
+                                                val successfulMoves = mutableListOf<Pair<com.feraxhp.gallery.model.GalleryImage, com.feraxhp.gallery.model.GalleryImage?>>()
+                                                
+                                                key.images.forEachIndexed { index, image ->
+                                                    actionProgress = (index + 1).toFloat() / total
+                                                    actionProgressText = "${index + 1} de $total"
+                                                    
+                                                    val movedImage = repository.moveImage(image, album.id)
+                                                    successfulMoves.add(image to movedImage)
+                                                    updatedImages.add(movedImage ?: image)
                                                 }
                                                 
-                                                val successfulMoves = results.filter { it.second != null }
-                                                val updatedImages = results.map { it.second ?: it.first }
+                                                val anySuccess = successfulMoves.any { it.second != null }
                                                 
-                                                if (successfulMoves.isNotEmpty()) {
+                                                if (anySuccess) {
                                                     val newAllImages = key.allImages.map { current ->
                                                         updatedImages.find { it.id == current.id } ?: current
                                                     }
@@ -739,10 +754,13 @@ fun App(
                                                     
                                                     handler?.clearSelection()
                                                     
+                                                    isProcessingAction = false
+                                                    
                                                     snackbarHostState.currentSnackbarData?.dismiss()
-                                                    val snackbarMessage = if (successfulMoves.size == 1) 
+                                                    val successCount = successfulMoves.count { it.second != null }
+                                                    val snackbarMessage = if (successCount == 1) 
                                                         "Imagen movida a ${album.name}" 
-                                                    else "${successfulMoves.size} imágenes movidas a ${album.name}"
+                                                    else "$successCount imágenes movidas a ${album.name}"
                                                     
                                                     val result = snackbarHostState.showSnackbar(
                                                         message = snackbarMessage,
@@ -751,17 +769,16 @@ fun App(
                                                     )
                                                     
                                                     if (result == SnackbarResult.ActionPerformed) {
-                                                        successfulMoves.forEach { (originalImage, movedImage) ->
+                                                        successfulMoves.filter { it.second != null }.forEach { (originalImage, movedImage) ->
                                                             val originalAlbumId = originalImagesState.find { it.first == originalImage.id }?.second
                                                             if (originalAlbumId != null && movedImage != null) {
                                                                 repository.moveImage(movedImage, originalAlbumId)
                                                             }
                                                         }
                                                         snackbarHostState.showSnackbar("Movimiento cancelado")
-                                                        // Nota: La restauración de la navegación de detalle es compleja aquí, 
-                                                        // simplificamos dejando al usuario donde está o volviendo si es posible.
                                                     }
                                                 } else {
+                                                    isProcessingAction = false
                                                     snackbarHostState.currentSnackbarData?.dismiss()
                                                     snackbarHostState.showSnackbar("Error al mover")
                                                     if (backStack.size > 1) {

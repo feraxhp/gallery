@@ -1,0 +1,38 @@
+# MIT Licence
+# Copyright 2024 feraxhp
+
+
+name: Publish and Build Android Release
+run-name: 📱 ¡Release! 📱
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🗃️ Checkout code
+        uses: actions/checkout@v4
+    
+      - name: ⚙️ Android Build
+        uses: feraxhp/kactions/.github/actions/ApkBuild@8f783ace0e8c5411f89422ccfb62979a1506ea90
+        id: release
+        with:
+          signing_key: ${{ secrets.SIGNING_KEY }}
+          alias: ${{ secrets.ALIAS }}
+          key_store_password: ${{ secrets.KEY_STORE_PASSWORD }}
+          key_password: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Get version
+        id: get_version
+        run: |
+          # Extract version from Cargo.toml
+          VERSION=$(grep 'versionName' androidApp/build/outputs/apk/release/output-metadata.json | cut -d'"' -f4)
+          echo "version=$VERSION" >> $GITHUB_ENV
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ env.version }}"
+          files: ${{ steps.release.outputs.path }}
+      

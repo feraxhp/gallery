@@ -1,7 +1,10 @@
 package com.feraxhp.gallery.components
 
+import android.graphics.PixelFormat
 import android.net.Uri
+import android.os.Build
 import android.util.Log
+import android.view.SurfaceView
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.annotation.OptIn
@@ -95,6 +98,13 @@ actual fun VideoPlayer(
                     resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setBackgroundColor(android.graphics.Color.TRANSPARENT)
                     setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    
+                    // Enable HDR support for the video surface
+                    (videoSurfaceView as? SurfaceView)?.let { surfaceView ->
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            surfaceView.holder.setFormat(PixelFormat.RGBA_1010102)
+                        }
+                    }
                 }
             },
             modifier = Modifier

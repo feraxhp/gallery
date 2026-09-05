@@ -55,12 +55,22 @@ fun DetailScreen(
     onImageChange: (GalleryImage) -> Unit = {},
     onLoadMetadata: (GalleryImage) -> Unit = {},
     isMetadataLoading: Boolean = false,
+    selectedImageId: Long? = null,
     onBack: () -> Unit,
     topPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val pagerState = rememberPagerState(initialPage = initialIndex) { images.size }
     val scope = rememberCoroutineScope()
     var showBottomSheet by remember { mutableStateOf(false) }
+
+    LaunchedEffect(selectedImageId, images.size) {
+        if (selectedImageId != null && images.isNotEmpty()) {
+            val targetIndex = images.indexOfFirst { it.id == selectedImageId }
+            if (targetIndex >= 0 && targetIndex != pagerState.currentPage) {
+                pagerState.animateScrollToPage(targetIndex)
+            }
+        }
+    }
 
     LaunchedEffect(pagerState.currentPage, images) {
         if (images.isNotEmpty() && pagerState.currentPage in images.indices) {

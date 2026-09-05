@@ -128,8 +128,10 @@ import com.feraxhp.gallery.viewmodel.GalleryViewModel
 import com.feraxhp.gallery.viewmodel.GalleryActionHandler
 import com.feraxhp.ktheme.DynamicTheme
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
@@ -189,6 +191,7 @@ fun App(
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     var pendingDeleteJob by remember { mutableStateOf<Job?>(null) }
+    var activePendingDeleteData by remember { mutableStateOf<Pair<List<GalleryImage>, suspend () -> Unit>?>(null) }
     val scope = rememberCoroutineScope()
 
     val selectedIds = activeActionHandler?.selectedImageIds?.collectAsState()?.value ?: emptySet()
@@ -213,26 +216,69 @@ fun App(
                     val currentBackstack = backStack
                     showDeleteConfirmation = false
                     
+                    // Si ya había un borrado pendiente sin confirmar/cancelar, concretarlo en disco inmediatamente
+                    val prevPending = activePendingDeleteData
+                    if (prevPending != null) {
+                        scope.launch {
+                            withContext(NonCancellable) {
+                                prevPending.second()
+                            }
+                        }
+                        activePendingDeleteData = null
+                    }
+
                     snackbarHostState.currentSnackbarData?.dismiss()
                     pendingDeleteJob?.cancel()
-                    pendingDeleteJob = scope.launch {
-                        // Salimos de la pantalla de detalle si aplica
-                        if (isDetailActive && backStack.size > 1) {
-                            backStack = backStack.dropLast(1)
+
+                    val isFromDetail = isDetailActive
+                    val vmImages = activeActionHandler?.images?.value ?: emptyList()
+                    val imagesInDetail = if (vmImages.any { it.id == currentImageInDetail?.id }) vmImages else ((currentDestination as? Destination.Detail)?.allImages ?: emptyList())
+
+                    var shouldExitDetail = false
+                    var targetImageAfterDelete: GalleryImage? = null
+
+                    if (isFromDetail) {
+                        val totalDetailCount = imagesInDetail.size
+                        if (totalDetailCount <= 1) {
+                            shouldExitDetail = true
+                            if (backStack.size > 1) {
+                                backStack = backStack.dropLast(1)
+                            }
+                        } else {
+                            shouldExitDetail = false
+                            val currentIndex = imagesInDetail.indexOfFirst { it.id == currentImageInDetail?.id }
+                            if (currentIndex >= 0) {
+                                val nextIndex = if (currentIndex == totalDetailCount - 1) {
+                                    currentIndex - 1
+                                } else {
+                                    currentIndex + 1
+                                }
+                                targetImageAfterDelete = imagesInDetail.getOrNull(nextIndex)
+                            }
                         }
-                        
+                    }
+
+                    val commitAction: suspend () -> Unit = {
+                        imagesToDelete.forEach { repository.deleteImage(it) }
+                    }
+                    activePendingDeleteData = Pair(imagesToDelete, commitAction)
+
+                    pendingDeleteJob = scope.launch {
                         val handler = activeActionHandler
                         
                         // Activamos la animación de shatter para todas
-                        handler?.markAsDeleted(imagesToDelete.map { it.id }.toSet(), fromDetail = isDetailActive)
+                        handler?.markAsDeleted(imagesToDelete.map { it.id }.toSet(), fromDetail = isFromDetail)
                         
-                        // Esperamos a que la animación termine. 
-                        // Si es desde detail, la transición de regreso dura 500ms, así que esperamos más.
-                        val deleteDelay = if (isDetailActive) 1000.milliseconds else 600.milliseconds
-                        delay(deleteDelay)
+                        if (isFromDetail && !shouldExitDetail && targetImageAfterDelete != null) {
+                            currentImageInDetail = targetImageAfterDelete
+                            delay(400.milliseconds)
+                        } else {
+                            val deleteDelay = if (isFromDetail && shouldExitDetail) 1000.milliseconds else 600.milliseconds
+                            delay(deleteDelay)
+                        }
+                        
                         imagesToDelete.forEach { handler?.hideImage(it.id) }
                         handler?.clearDeletedState()
-                        
                         handler?.clearSelection()
                         
                         val snackbarMessage = if (imagesToDelete.size == 1) "Imagen eliminada" else "${imagesToDelete.size} imágenes eliminadas"
@@ -246,12 +292,25 @@ fun App(
                             // Si se pulsa Undo, volvemos a mostrarlas
                             imagesToDelete.forEach { handler?.restoreImage(it.id) }
                             handler?.clearDeletedState()
-                            if (isDetailActive) {
-                                backStack = currentBackstack
+                            if (isFromDetail) {
+                                if (shouldExitDetail) {
+                                    backStack = currentBackstack
+                                } else {
+                                    imagesToDelete.firstOrNull()?.let { restored ->
+                                        scope.launch {
+                                            delay(150.milliseconds)
+                                            currentImageInDetail = restored
+                                        }
+                                    }
+                                }
                             }
+                            activePendingDeleteData = null
                         } else {
                             // Si no se pulsa, borramos definitivamente
-                            imagesToDelete.forEach { repository.deleteImage(it) }
+                            withContext(NonCancellable) {
+                                commitAction()
+                            }
+                            activePendingDeleteData = null
                         }
                     }
                 }) {
@@ -620,6 +679,7 @@ fun App(
                                     GalleryScreen(
                                         viewModel = viewModel,
                                         onImageClick = { image, allImages ->
+                                            currentImageInDetail = image
                                             backStack =
                                                 backStack + Destination.Detail(image, allImages)
                                         },
@@ -657,6 +717,7 @@ fun App(
                                         viewModel = viewModel,
                                         albumId = key.albumId,
                                         onImageClick = { image, allImages ->
+                                            currentImageInDetail = image
                                             backStack =
                                                 backStack + Destination.Detail(image, allImages)
                                         },
@@ -686,9 +747,10 @@ fun App(
                                     }
 
                                     val vmImages by activeActionHandler?.images?.collectAsState() ?: remember { mutableStateOf(emptyList<GalleryImage>()) }
-                                    val imagesToShow = remember(vmImages, key.image, key.allImages) {
-                                        if (vmImages.any { it.id == key.image.id }) vmImages else key.allImages
+                                    val isExternal = remember(key.image) {
+                                        key.allImages.size == 1 && activeActionHandler?.images?.value?.none { it.id == key.image.id } == true
                                     }
+                                    val imagesToShow = if (isExternal) key.allImages else vmImages
                                     val loadingIds by activeActionHandler?.loadingMetadataIds?.collectAsState() ?: remember { mutableStateOf(emptySet<Long>()) }
 
                                     DetailScreen(
@@ -701,6 +763,7 @@ fun App(
                                         onImageChange = { currentImageInDetail = it },
                                         onLoadMetadata = { activeActionHandler?.loadFullMetadata(it) },
                                         isMetadataLoading = currentImageInDetail?.id in loadingIds,
+                                        selectedImageId = currentImageInDetail?.id,
                                         topPadding = topPadding,
                                         onBack = {
                                             if (backStack.size > 1) {
@@ -796,36 +859,4 @@ fun App(
             }
         }
     }
-}
-
-@androidx.compose.ui.tooling.preview.Preview
-@Composable
-fun AppPreview() {
-    val mockRepository = object : ImageRepository {
-        override suspend fun getImages(): List<com.feraxhp.gallery.model.GalleryImage> = emptyList()
-        override suspend fun getImagesByAlbum(albumId: String): List<com.feraxhp.gallery.model.GalleryImage> = emptyList()
-        override suspend fun getAlbums(): List<com.feraxhp.gallery.model.Album> = emptyList()
-        override suspend fun getImageById(id: Long, type: com.feraxhp.gallery.model.MediaType): com.feraxhp.gallery.model.GalleryImage? = null
-        override suspend fun loadFullMetadata(image: com.feraxhp.gallery.model.GalleryImage): com.feraxhp.gallery.model.GalleryImage = image
-        override suspend fun deleteImage(image: com.feraxhp.gallery.model.GalleryImage): Boolean = true
-        override suspend fun moveImage(image: com.feraxhp.gallery.model.GalleryImage, albumId: String): com.feraxhp.gallery.model.GalleryImage? = null
-        override suspend fun copyImage(image: com.feraxhp.gallery.model.GalleryImage): Boolean = true
-        override suspend fun createAlbum(name: String): Album? { return null }
-
-        override suspend fun getImageByUri(uri: String): GalleryImage? { return null }
-        override fun openInFileManager(path: String) {}
-        override fun shareImage(image: com.feraxhp.gallery.model.GalleryImage) {}
-        override fun shareImages(images: List<GalleryImage>) {}
-
-        override suspend fun refreshMedia() {}
-    }
-    App(
-        repository = mockRepository,
-        hasReadPermission = true,
-        hasWritePermission = true,
-        initialMediaUri = null,
-        onUriConsumed = {},
-        onRequestReadPermission = {},
-        onRequestWritePermission = {}
-    )
 }

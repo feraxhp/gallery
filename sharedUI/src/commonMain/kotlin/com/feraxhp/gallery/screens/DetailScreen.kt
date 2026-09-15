@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -29,6 +30,8 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import androidx.media3.common.util.Log
+import androidx.media3.common.util.UnstableApi
 import coil3.compose.AsyncImage
 import com.feraxhp.gallery.components.MapPreview
 import com.feraxhp.gallery.components.VideoPlayer
@@ -165,6 +168,7 @@ fun DetailScreen(
     }
 }
 
+@androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun DetailImageItem(
@@ -268,19 +272,34 @@ private fun DetailImageItem(
                                 val event = awaitPointerEvent()
                                 val zoomChange = event.calculateZoom()
                                 val panChange = event.calculatePan()
+                                val centroid = event.calculateCentroid()
 
                                 val currentScale = scale.value
+
                                 if (currentScale > 1.01f || zoomChange != 1f || isZooming) {
                                     isZooming = true
-                                    event.changes.forEach { it.consume() }
 
-                                    val newScale = (currentScale * zoomChange).coerceIn(1f, 20f)
-                                    // El multiplicador escala con el zoom para que el paneo no se sienta lento en aumentos grandes
+                                    val newScale = (currentScale * zoomChange).coerceIn(1f, Float.MAX_VALUE)
+                                    val actualZoomChange = if (currentScale > 0f) newScale / currentScale else 1f
+
+                                    var zoomOffsetX = 0f
+                                    var zoomOffsetY = 0f
+
+                                    if (centroid != Offset.Unspecified) {
+                                        val center = Offset(size.width / 2f, size.height / 2f)
+                                        val centroidFromCenter = centroid - center
+                                        zoomOffsetX = (centroidFromCenter.x - offsetX.value) * (1f - actualZoomChange)
+                                        zoomOffsetY = (centroidFromCenter.y - offsetY.value) * (1f - actualZoomChange)
+                                    }
                                     val panSensitivity = 1.2f * currentScale
+
+                                    val targetOffsetX = offsetX.value + zoomOffsetX + ( panChange.x * panSensitivity )
+                                    val targetOffsetY = offsetY.value + zoomOffsetY + ( panChange.y * panSensitivity )
+
                                     scope.launch {
                                         scale.snapTo(newScale)
-                                        offsetX.snapTo(offsetX.value + panChange.x * panSensitivity)
-                                        offsetY.snapTo(offsetY.value + panChange.y * panSensitivity)
+                                        offsetX.snapTo(targetOffsetX)
+                                        offsetY.snapTo(targetOffsetY)
                                     }
                                 } else {
                                     if (!isSwipingVertical && abs(panChange.y) > abs(panChange.x) && abs(panChange.y) > 2f) {
@@ -304,6 +323,7 @@ private fun DetailImageItem(
                                     onSwipeUp()
                                 } else {
                                     scope.launch {
+                                        scale.animateTo(1f)
                                         offsetY.animateTo(0f)
                                         offsetX.animateTo(0f)
                                     }
@@ -327,16 +347,22 @@ private fun DetailImageItem(
                                     }
                                 }
                             },
-                            onDoubleTap = {
+                            onDoubleTap = { tapOffset ->
                                 scope.launch {
                                     if (scale.value > 1.01f) {
                                         launch { scale.animateTo(1f) }
                                         launch { offsetX.animateTo(0f) }
                                         launch { offsetY.animateTo(0f) }
                                     } else {
-                                        launch { scale.animateTo(3f) }
-                                        launch { offsetX.animateTo(0f) }
-                                        launch { offsetY.animateTo(0f) }
+                                        val targetScale = 3f
+                                        val center = Offset(size.width / 2f, size.height / 2f)
+                                        val tapFromCenter = tapOffset - center
+                                        val targetOffsetX = (tapFromCenter.x - offsetX.value) * (1f - targetScale)
+                                        val targetOffsetY = (tapFromCenter.y - offsetY.value) * (1f - targetScale)
+
+                                        launch { scale.animateTo(targetScale) }
+                                        launch { offsetX.animateTo(targetOffsetX) }
+                                        launch { offsetY.animateTo(targetOffsetY) }
                                     }
                                 }
                             }

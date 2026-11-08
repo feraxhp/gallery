@@ -42,7 +42,7 @@ import com.feraxhp.gallery.components.VideoPlayer
 import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.model.MediaType
 import com.feraxhp.gallery.repository.ImageRepository
-import com.feraxhp.gallery.util.rememberVideoModel
+import com.feraxhp.gallery.util.rememberFullImageModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
@@ -302,11 +302,12 @@ private fun DetailImageItem(
     onOffsetYChanged: (Float) -> Unit,
     onSwipeUp: () -> Unit
 ) {
-    val model = if (image.type == MediaType.VIDEO) {
-        rememberVideoModel(image.uri, image.duration)
-    } else {
-        image.uri
-    }
+    val model = rememberFullImageModel(
+        uri = image.uri,
+        isVideo = image.type == MediaType.VIDEO,
+        duration = image.duration,
+        thumbnailSizePx = 360
+    )
 
     var backCalled by remember { mutableStateOf(false) }
     val safeOnBack = {

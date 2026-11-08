@@ -17,6 +17,8 @@ import com.feraxhp.gallery.model.Album
 import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.model.MediaType
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
@@ -30,6 +32,32 @@ import kotlin.time.Duration.Companion.milliseconds
 
 private val VIDEO_EXTENSIONS = listOf("mp4", "mkv", "mov", "avi", "3gp", "webm")
 private val IMAGE_EXTENSIONS = listOf("jpg", "jpeg", "png", "webp", "heic", "heif")
+private val MOTION_PHOTO_BYTES = "MotionPhoto".encodeToByteArray()
+private val MICRO_VIDEO_BYTES = "MicroVideo".encodeToByteArray()
+
+private fun ByteArray.indexOfSubArray(target: ByteArray): Int {
+    if (target.isEmpty() || this.size < target.size) return -1
+    val first = target[0]
+    val maxIdx = this.size - target.size
+    var i = 0
+    while (i <= maxIdx) {
+        if (this[i] == first) {
+            var j = 1
+            while (j < target.size && this[i + j] == target[j]) {
+                j++
+            }
+            if (j == target.size) return i
+        }
+        i++
+    }
+    return -1
+}
+
+private fun isMotionPhotoXmp(xmpBlob: ByteArray?): Boolean {
+    if (xmpBlob == null || xmpBlob.size < MICRO_VIDEO_BYTES.size) return false
+    return xmpBlob.indexOfSubArray(MOTION_PHOTO_BYTES) >= 0 ||
+        xmpBlob.indexOfSubArray(MICRO_VIDEO_BYTES) >= 0
+}
 
 class AndroidImageRepository(private val context: Context) : ImageRepository {
     override suspend fun getImages(): List<GalleryImage> = getImagesInternal(null, null)
@@ -44,28 +72,35 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
         selection: String?,
         selectionArgs: Array<String>?
     ): List<GalleryImage> = withContext(Dispatchers.IO) {
-        val media = mutableListOf<GalleryImage>()
-        
-        val images = queryMedia(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            selection,
-            selectionArgs,
-            MediaType.IMAGE
-        )
-        
-        val videos = queryMedia(
-            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-            selection,
-            selectionArgs,
-            MediaType.VIDEO
-        )
-        
-        media.addAll(images)
-        media.addAll(videos)
-        media.sortByDescending { it.dateAdded }
-        
-        Log.d("GalleryRepo", "Returning ${media.size} items total (${images.size} images, ${videos.size} videos)")
-        media
+        coroutineScope {
+            val imagesDeferred = async {
+                queryMedia(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    selection,
+                    selectionArgs,
+                    MediaType.IMAGE
+                )
+            }
+            val videosDeferred = async {
+                queryMedia(
+                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                    selection,
+                    selectionArgs,
+                    MediaType.VIDEO
+                )
+            }
+
+            val images = imagesDeferred.await()
+            val videos = videosDeferred.await()
+
+            val media = ArrayList<GalleryImage>(images.size + videos.size)
+            media.addAll(images)
+            media.addAll(videos)
+            media.sortByDescending { it.dateAdded }
+
+            Log.d("GalleryRepo", "Returning ${media.size} items total (${images.size} images, ${videos.size} videos)")
+            media
+        }
     }
 
     private fun queryMedia(
@@ -170,15 +205,10 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
                     val size = if (sizeColumn != -1) cursor.getLong(sizeColumn) else null
                     val path = if (dataColumn != -1) cursor.getString(dataColumn) else null
                     
-                    var detectedMotionPhoto = false
-                    if (type == MediaType.IMAGE && xmpColumn != -1) {
-                        val xmpBlob = cursor.getBlob(xmpColumn)
-                        if (xmpBlob != null) {
-                            val xmpString = String(xmpBlob, Charsets.UTF_8)
-                            if (xmpString.contains("MicroVideo") || xmpString.contains("MotionPhoto")) {
-                                detectedMotionPhoto = true
-                            }
-                        }
+                    val detectedMotionPhoto = if (type == MediaType.IMAGE && xmpColumn != -1 && !cursor.isNull(xmpColumn)) {
+                        isMotionPhotoXmp(cursor.getBlob(xmpColumn))
+                    } else {
+                        false
                     }
 
                     val contentUri = ContentUris.withAppendedId(uri, id)

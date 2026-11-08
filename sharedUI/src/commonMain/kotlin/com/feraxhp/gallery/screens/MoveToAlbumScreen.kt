@@ -20,7 +20,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.feraxhp.gallery.model.Album
 import com.feraxhp.gallery.repository.ImageRepository
-import com.feraxhp.gallery.util.rememberVideoModel
+import com.feraxhp.gallery.util.rememberThumbnailModel
 import com.feraxhp.gallery.viewmodel.AlbumsViewModel
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
@@ -144,7 +144,7 @@ fun MoveToAlbumScreen(
                             }
                         }
 
-                        items(albums, key = { it.id }) { album ->
+                        items(albums, key = { it.id }, contentType = { "album_row" }) { album ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -152,11 +152,13 @@ fun MoveToAlbumScreen(
                                     .padding(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                val model = if (album.coverUri.contains("video", ignoreCase = true)) {
-                                    rememberVideoModel(album.coverUri, null)
-                                } else {
-                                    album.coverUri
-                                }
+                                val isVideoCover = album.coverUri.contains("video", ignoreCase = true)
+                                val model = rememberThumbnailModel(
+                                    uri = album.coverUri,
+                                    isVideo = isVideoCover,
+                                    duration = null,
+                                    sizePx = 240
+                                )
                                 if (album.coverUri.isEmpty()) {
                                     Box(
                                         modifier = Modifier

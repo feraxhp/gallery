@@ -34,9 +34,11 @@ import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
+import coil3.memory.MemoryCache
 import coil3.video.VideoFrameDecoder
 import com.feraxhp.gallery.App
 import com.feraxhp.gallery.repository.AndroidImageRepository
+import com.feraxhp.gallery.util.MediaStoreThumbnailFetcher
 
 class AppActivity : ComponentActivity() {
     private var initialUri by mutableStateOf<String?>(null)
@@ -57,7 +59,13 @@ class AppActivity : ComponentActivity() {
         setContent {
             setSingletonImageLoaderFactory { context ->
                 ImageLoader.Builder(context)
+                    .memoryCache {
+                        MemoryCache.Builder()
+                            .maxSizePercent(context, 0.25)
+                            .build()
+                    }
                     .components {
+                        add(MediaStoreThumbnailFetcher.Factory())
                         add(VideoFrameDecoder.Factory())
                     }
                     .build()

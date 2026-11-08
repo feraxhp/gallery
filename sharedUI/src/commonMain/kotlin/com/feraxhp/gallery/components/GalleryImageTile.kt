@@ -29,8 +29,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onLayoutRectChanged
+import androidx.compose.ui.layout.onVisibilityChanged
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,7 +46,7 @@ import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.model.MediaType
-import com.feraxhp.gallery.util.rememberVideoModel
+import com.feraxhp.gallery.util.rememberThumbnailModel
 import com.feraxhp.gallery.util.toImageBitmap
 import gallery.sharedui.generated.resources.Res
 import gallery.sharedui.generated.resources.ic_cyclone
@@ -68,6 +68,28 @@ val shapes = listOf(
     MaterialShapes.Pentagon,
 )
 
+private val SelectionBadgeShape = MixedCornerShape(6.dp, 8.dp)
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun rememberGalleryShapes(): List<Shape> {
+    val s0 = shapes[0].toShape()
+    val s1 = shapes[1].toShape()
+    val s2 = shapes[2].toShape()
+    val s3 = shapes[3].toShape()
+    val s4 = shapes[4].toShape()
+    val s5 = shapes[5].toShape()
+    val s6 = shapes[6].toShape()
+    val s7 = shapes[7].toShape()
+    val s8 = shapes[8].toShape()
+    val s9 = shapes[9].toShape()
+    val s10 = shapes[10].toShape()
+    val s11 = shapes[11].toShape()
+    return remember(s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11) {
+        listOf(s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11)
+    }
+}
+
 enum class Type {
     LOADED,
     ERROR,
@@ -76,7 +98,7 @@ enum class Type {
 
 
 @Suppress("RememberReturnType")
-@OptIn(ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun GalleryImageTile(
     image: GalleryImage,
@@ -91,15 +113,19 @@ fun GalleryImageTile(
     modifier: Modifier = Modifier,
     isSelected: Boolean = false,
     isSelectionMode: Boolean = false,
+    fallbackShape: Shape? = null,
 ) {
     val haptic = LocalHapticFeedback.current
-    val index = remember { (image.id.toULong() % 12uL).toInt() }
-    var state by remember { mutableStateOf(Type.LOADING) }
-    val model = if (image.type == MediaType.VIDEO) {
-        rememberVideoModel(image.uri, image.duration)
-    } else {
-        image.uri
-    }
+    val index = remember(image.id) { (image.id.toULong() % 12uL).toInt() }
+    val resolvedFallbackShape = fallbackShape ?: shapes[index].toShape()
+    var state by remember(image.id) { mutableStateOf(Type.LOADING) }
+    var isVisibleInWindow by remember { mutableStateOf(false) }
+    val model = rememberThumbnailModel(
+        uri = image.uri,
+        isVideo = image.type == MediaType.VIDEO,
+        duration = image.duration,
+        sizePx = 360
+    )
 
     androidx.compose.runtime.DisposableEffect(image.id) {
         onDispose {
@@ -107,22 +133,25 @@ fun GalleryImageTile(
         }
     }
 
+    val isTransitionActive = animatedVisibilityScope.transition.currentState != animatedVisibilityScope.transition.targetState
+    val attachSharedBounds = isVisibleInWindow || isTransitionActive
+
     with(sharedTransitionScope) {
         Box(
             modifier = modifier
                 .aspectRatio(1f)
                 .fillMaxWidth()
-                .onGloballyPositioned {
+                .onVisibilityChanged(minFractionVisible = 0.001f) { visible ->
+                    isVisibleInWindow = visible
+                }
+                .onLayoutRectChanged(throttleMillis = 64, debounceMillis = 64) { layoutBounds ->
+                    val b = layoutBounds.boundsInRoot
                     onPositioned(
                         Rect(
-                            offset = Offset(
-                                it.positionInRoot().x,
-                                it.positionInRoot().y
-                            ),
-                            size = Size(
-                                it.size.width.toFloat(),
-                                it.size.height.toFloat()
-                            )
+                            left = b.left.toFloat(),
+                            top = b.top.toFloat(),
+                            right = b.right.toFloat(),
+                            bottom = b.bottom.toFloat()
                         )
                     )
                 }
@@ -149,7 +178,7 @@ fun GalleryImageTile(
         ) {
             if(state != Type.LOADED) {
                 Spacer (
-                    modifier
+                    Modifier
                         .size(32.dp)
                         .background(
                             color = when (state) {
@@ -157,7 +186,7 @@ fun GalleryImageTile(
                                 Type.LOADED,
                                 Type.ERROR -> { MaterialTheme.colorScheme.onError }
                             },
-                            shape = shapes[index].toShape()
+                            shape = resolvedFallbackShape
                         )
                 )
             }
@@ -178,12 +207,12 @@ fun GalleryImageTile(
                                 }
                                 Type.ERROR -> { MaterialTheme.colorScheme.onError }
                             },
-                            MixedCornerShape(6.dp, 8.dp)
+                            SelectionBadgeShape
                         ),
                     contentAlignment = Alignment.TopStart
                 ) {
                     Spacer (
-                        modifier
+                        Modifier
                             .padding(3.dp)
                             .size(16.dp)
                             .background(
@@ -195,49 +224,46 @@ fun GalleryImageTile(
                                     }
                                     Type.ERROR -> { MaterialTheme.colorScheme.onError }
                                 },
-                                shape = shapes[index].toShape()
+                                shape = resolvedFallbackShape
                             )
                     )
                 }
             }
 
+            val targetShape = if (isSelected) MaterialTheme.shapes.small else MaterialTheme.shapes.medium
+
             AsyncImage(
                 model = model,
                 onState = { imState ->
                     if (imState is AsyncImagePainter.State.Success) {
-                        state = Type.LOADED;
+                        state = Type.LOADED
                         imState.result.image.toImageBitmap()?.let {
                             onBitmapLoaded(it)
                         }
-                    }
-                    else
-                    if (imState is AsyncImagePainter.State.Error) {
-                        state = Type.ERROR;
+                    } else if (imState is AsyncImagePainter.State.Error) {
+                        state = Type.ERROR
                     }
                 },
                 contentDescription = image.name,
                 modifier = Modifier
-                    .padding(
-                        if (isSelected) { 4.dp }
-                        else { 0.dp }
-                    )
+                    .padding(if (isSelected) 4.dp else 0.dp)
                     .fillMaxSize()
-                    .sharedBounds(
-                        sharedContentState = rememberSharedContentState(
-                            key = "image-${image.id}"
-                        ),
-                        animatedVisibilityScope = animatedVisibilityScope,
-                        boundsTransform = { _, _ -> tween(500) },
-                        resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
-                        clipInOverlayDuringTransition = OverlayClip(
-                            if (isSelected) { MaterialTheme.shapes.small }
-                            else { MaterialTheme.shapes.medium }
-                        )
+                    .then(
+                        if (attachSharedBounds) {
+                            Modifier.sharedBounds(
+                                sharedContentState = rememberSharedContentState(
+                                    key = "image-${image.id}"
+                                ),
+                                animatedVisibilityScope = animatedVisibilityScope,
+                                boundsTransform = { _, _ -> tween(500) },
+                                resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
+                                clipInOverlayDuringTransition = OverlayClip(targetShape)
+                            )
+                        } else {
+                            Modifier
+                        }
                     )
-                    .clip(
-                        if (isSelected) { MaterialTheme.shapes.small }
-                        else { MaterialTheme.shapes.medium }
-                    ),
+                    .clip(targetShape),
                 contentScale = ContentScale.Crop
             )
 

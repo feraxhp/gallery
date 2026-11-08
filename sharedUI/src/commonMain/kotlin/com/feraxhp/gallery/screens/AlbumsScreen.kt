@@ -30,7 +30,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.feraxhp.gallery.model.Album
 import com.feraxhp.gallery.repository.ImageRepository
-import com.feraxhp.gallery.util.rememberVideoModel
+import com.feraxhp.gallery.util.rememberThumbnailModel
 import com.feraxhp.gallery.viewmodel.AlbumsViewModel
 
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -127,7 +127,7 @@ fun AlbumsScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                items(albums, key = { it.id }) { album ->
+                items(albums, key = { it.id }, contentType = { "album" }) { album ->
                     with(sharedTransitionScope) {
                         Column(
                             modifier = Modifier
@@ -138,11 +138,13 @@ fun AlbumsScreen(
                                 )
                                 .clickable { onAlbumClick(album) }
                         ) {
-                            val model = if (album.coverUri.contains("video", ignoreCase = true)) {
-                                rememberVideoModel(album.coverUri, null)
-                            } else {
-                                album.coverUri
-                            }
+                            val isVideoCover = album.coverUri.contains("video", ignoreCase = true)
+                            val model = rememberThumbnailModel(
+                                uri = album.coverUri,
+                                isVideo = isVideoCover,
+                                duration = null,
+                                sizePx = 420
+                            )
                             Box(
                                 modifier = Modifier
                                     .aspectRatio(1f)

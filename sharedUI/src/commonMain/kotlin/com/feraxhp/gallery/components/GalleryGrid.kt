@@ -22,13 +22,14 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onLayoutRectChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -110,9 +111,11 @@ fun GalleryGrid(
     // Offset de la propia galería respecto al root para corregir el posicionamiento de la animación
     var galleryOffset by remember { mutableStateOf(Offset.Zero) }
 
-    // Para rastrear posiciones y bitmaps de las imágenes visibles en pantalla
-    val imageBounds = remember { mutableStateMapOf<Long, androidx.compose.ui.geometry.Rect>() }
-    val imageBitmaps = remember { mutableStateMapOf<Long, ImageBitmap>() }
+    // Mapas no observables para rastrear posiciones y bitmaps sin disparar Snapshots en cada frame de scroll
+    val imageBounds = remember { mutableMapOf<Long, androidx.compose.ui.geometry.Rect>() }
+    val imageBitmaps = remember { mutableMapOf<Long, ImageBitmap>() }
+    val fallbackShapes = rememberGalleryShapes()
+    val density = LocalDensity.current
     
     // Estado para la animación activa
     var activeShatterEffects by remember { mutableStateOf<Map<Long, ShatterData>>(emptyMap()) }
@@ -226,9 +229,10 @@ fun GalleryGrid(
     }
 
     val groupedImages = remember(images) {
+        val timeZone = TimeZone.currentSystemDefault()
         images.groupBy {
             Instant.fromEpochSeconds(it.dateAdded)
-                .toLocalDateTime(TimeZone.currentSystemDefault())
+                .toLocalDateTime(timeZone)
                 .date
         }
     }
@@ -243,7 +247,10 @@ fun GalleryGrid(
     } else {
         Box(
             modifier = modifier
-                .onGloballyPositioned { galleryOffset = it.positionInRoot() }
+                .onLayoutRectChanged(throttleMillis = 64, debounceMillis = 64) { layoutBounds ->
+                    val pos = layoutBounds.positionInRoot
+                    galleryOffset = Offset(pos.x.toFloat(), pos.y.toFloat())
+                }
                 .pointerInput(Unit) {
                     awaitPointerEventScope {
                         while (true) {
@@ -314,7 +321,11 @@ fun GalleryGrid(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     groupedImages.forEach { (date, imagesInDate) ->
-                        item(key = "header_${date}", span = { GridItemSpan(maxLineSpan) }) {
+                        item(
+                            key = "header_${date}",
+                            contentType = "header",
+                            span = { GridItemSpan(maxLineSpan) }
+                        ) {
                             val monthName = when (date.month) {
                                 kotlinx.datetime.Month.JANUARY -> "enero"
                                 kotlinx.datetime.Month.FEBRUARY -> "febrero"
@@ -338,9 +349,14 @@ fun GalleryGrid(
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }
-                        items(imagesInDate, key = { it.id }) { image ->
+                        items(
+                            items = imagesInDate,
+                            key = { it.id },
+                            contentType = { "image" }
+                        ) { image ->
                             val isGathering = image.id in imagesToGather
                             val isDeleted = image.id in deletedImageIds
+                            val shapeIdx = (image.id.toULong() % 12uL).toInt()
                             GalleryImageTile(
                                 image = image,
                                 allImages = images,
@@ -348,6 +364,7 @@ fun GalleryGrid(
                                 onToggleSelection = onToggleSelection,
                                 isSelected = image.id in selectedImageIds,
                                 isSelectionMode = isSelectionMode,
+                                fallbackShape = fallbackShapes[shapeIdx],
                                 onPositioned = { rect ->
                                     imageBounds[image.id] = rect
                                 },
@@ -364,7 +381,9 @@ fun GalleryGrid(
                                 animatedVisibilityScope = animatedVisibilityScope,
                                 modifier = Modifier
                                     .animateItem()
-                                    .alpha(if (isGathering || isDeleted) 0f else 1f)
+                                    .graphicsLayer {
+                                        alpha = if (isGathering || isDeleted) 0f else 1f
+                                    }
                             )
                         }
                     }
@@ -377,7 +396,6 @@ fun GalleryGrid(
                 if (gatheringProgress.value > 0f) {
                     val targetData = imagesToGather[gatheringTargetId]
                     if (targetData != null) {
-                        val density = androidx.compose.ui.platform.LocalDensity.current
                         imagesToGather.forEach { (id, data) ->
                             val isTarget = id == gatheringTargetId
                             val progress = gatheringProgress.value
@@ -414,7 +432,6 @@ fun GalleryGrid(
 
                 // 2. Efecto Shatter (Rotura)
                 activeShatterEffects.forEach { (id, data) ->
-                    val density = androidx.compose.ui.platform.LocalDensity.current
                     key(id) {
                         ShatterEffect(
                             bitmap = data.bitmap,

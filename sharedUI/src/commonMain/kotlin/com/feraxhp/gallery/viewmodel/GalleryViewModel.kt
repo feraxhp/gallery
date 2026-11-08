@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.touchlab.kermit.Logger
 import com.feraxhp.gallery.model.GalleryImage
+import com.feraxhp.gallery.model.MediaFilter
+import com.feraxhp.gallery.model.MediaType
+import com.feraxhp.gallery.model.SortOrder
 import com.feraxhp.gallery.repository.ImageRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -16,7 +19,8 @@ import kotlinx.coroutines.launch
 
 class GalleryViewModel(
     private val repository: ImageRepository,
-    private val albumId: String? = null
+    private val albumId: String? = null,
+    initialFilter: MediaFilter = MediaFilter.ALL
 ) : ViewModel(), GalleryActionHandler {
 
     private val logger = Logger.withTag("GalleryViewModel")
@@ -25,8 +29,34 @@ class GalleryViewModel(
     private val _loadingMetadataIds = MutableStateFlow<Set<Long>>(emptySet())
     override val loadingMetadataIds: StateFlow<Set<Long>> = _loadingMetadataIds.asStateFlow()
 
-    override val images: StateFlow<List<GalleryImage>> = combine(_images, _hiddenImageIds) { images, hiddenIds ->
-        images.filter { it.id !in hiddenIds }
+    private val _mediaFilter = MutableStateFlow(initialFilter)
+    val mediaFilter: StateFlow<MediaFilter> = _mediaFilter.asStateFlow()
+
+    private val _sortOrder = MutableStateFlow(SortOrder.DATE_DESC)
+    val sortOrder: StateFlow<SortOrder> = _sortOrder.asStateFlow()
+
+    override val images: StateFlow<List<GalleryImage>> = combine(
+        _images,
+        _hiddenImageIds,
+        _mediaFilter,
+        _sortOrder
+    ) { images, hiddenIds, filter, sort ->
+        val filtered = images.filter { img ->
+            if (img.id in hiddenIds) return@filter false
+            when (filter) {
+                MediaFilter.ALL -> true
+                MediaFilter.IMAGES -> img.type == MediaType.IMAGE
+                MediaFilter.VIDEOS -> img.type == MediaType.VIDEO
+                MediaFilter.MOTION_PHOTOS -> img.isMotionPhoto
+            }
+        }
+        when (sort) {
+            SortOrder.DATE_DESC -> filtered.sortedByDescending { it.dateAdded }
+            SortOrder.DATE_ASC -> filtered.sortedBy { it.dateAdded }
+            SortOrder.SIZE_DESC -> filtered.sortedByDescending { it.size ?: 0L }
+            SortOrder.SIZE_ASC -> filtered.sortedBy { it.size ?: 0L }
+            SortOrder.NAME_ASC -> filtered.sortedBy { it.name.lowercase() }
+        }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val _isLoading = MutableStateFlow(false)
@@ -53,6 +83,19 @@ class GalleryViewModel(
 
     init {
         loadImages()
+        viewModelScope.launch {
+            repository.mediaChanges.collect {
+                loadImages()
+            }
+        }
+    }
+
+    fun setMediaFilter(filter: MediaFilter) {
+        _mediaFilter.value = filter
+    }
+
+    fun setSortOrder(order: SortOrder) {
+        _sortOrder.value = order
     }
 
     override fun markAsDeleted(imageIds: Set<Long>, fromDetail: Boolean) {
@@ -103,6 +146,19 @@ class GalleryViewModel(
         } else {
             (listOf(image) + current).sortedByDescending { it.dateAdded }
         }
+    }
+
+    override suspend fun renameImage(image: GalleryImage, newName: String): GalleryImage? {
+        val updated = repository.renameImage(image, newName) ?: return null
+        val current = _images.value.toMutableList()
+        val idx = current.indexOfFirst { it.id == image.id || it.id == updated.id }
+        if (idx >= 0) {
+            current[idx] = updated
+            _images.value = current
+        } else {
+            upsertImage(updated)
+        }
+        return updated
     }
 
     override fun clearDeletedState() {

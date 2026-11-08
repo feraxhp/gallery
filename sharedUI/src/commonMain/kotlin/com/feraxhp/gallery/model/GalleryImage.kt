@@ -8,6 +8,22 @@ enum class MediaType {
 }
 
 @Serializable
+enum class MediaFilter {
+    ALL, IMAGES, VIDEOS, MOTION_PHOTOS
+}
+
+@Serializable
+enum class SortOrder {
+    DATE_DESC, DATE_ASC, SIZE_DESC, SIZE_ASC, NAME_ASC
+}
+
+@Serializable
+data class PickerConfig(
+    val allowMultiple: Boolean = false,
+    val initialFilter: MediaFilter = MediaFilter.ALL
+)
+
+@Serializable
 data class GalleryImage(
     val id: Long,
     val uri: String,

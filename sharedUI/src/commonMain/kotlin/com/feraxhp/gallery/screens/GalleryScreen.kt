@@ -22,7 +22,9 @@ fun GalleryScreen(
     onImageClick: (GalleryImage, List<GalleryImage>) -> Unit,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
-    topPadding: androidx.compose.ui.unit.Dp = 0.dp
+    topPadding: androidx.compose.ui.unit.Dp = 0.dp,
+    onImageLongClick: ((GalleryImage, List<GalleryImage>) -> Unit)? = null,
+    enableMultiSelectDrag: Boolean = true
 ) {
     val images by viewModel.images.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -72,6 +74,8 @@ fun GalleryScreen(
             viewModel.savedScrollIndex = index
             viewModel.savedScrollOffset = offset
         },
+        onImageLongClick = onImageLongClick,
+        enableMultiSelectDrag = enableMultiSelectDrag,
         modifier = Modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(cornerRadius))

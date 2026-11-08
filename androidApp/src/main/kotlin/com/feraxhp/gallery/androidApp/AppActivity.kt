@@ -15,6 +15,7 @@
 package com.feraxhp.gallery.androidApp
 
 import android.Manifest
+import android.content.ClipData
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
@@ -37,18 +38,20 @@ import coil3.compose.setSingletonImageLoaderFactory
 import coil3.memory.MemoryCache
 import coil3.video.VideoFrameDecoder
 import com.feraxhp.gallery.App
+import com.feraxhp.gallery.model.GalleryImage
+import com.feraxhp.gallery.model.MediaFilter
+import com.feraxhp.gallery.model.PickerConfig
 import com.feraxhp.gallery.repository.AndroidImageRepository
 import com.feraxhp.gallery.util.MediaStoreThumbnailFetcher
 
 class AppActivity : ComponentActivity() {
     private var initialUri by mutableStateOf<String?>(null)
+    private var pickerConfig by mutableStateOf<PickerConfig?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-        if (savedInstanceState == null) {
-            handleIntent(intent)
-        }
+        handleIntent(intent, isInitialCreate = savedInstanceState == null)
         enableEdgeToEdge()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             window.colorMode = ActivityInfo.COLOR_MODE_HDR
@@ -150,6 +153,14 @@ class AppActivity : ComponentActivity() {
                 hasWritePermission = hasWritePermission,
                 initialMediaUri = initialUri,
                 onUriConsumed = { initialUri = null },
+                pickerConfig = pickerConfig,
+                onPickResult = { pickedImages ->
+                    finishWithPickedMedia(pickedImages)
+                },
+                onCancelPicker = {
+                    setResult(RESULT_CANCELED)
+                    finish()
+                },
                 onRequestReadPermission = {
                     readLauncher.launch(readPermissions)
                 },
@@ -169,16 +180,70 @@ class AppActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        handleIntent(intent)
+        setIntent(intent)
+        handleIntent(intent, isInitialCreate = true)
     }
 
-    private fun handleIntent(intent: Intent?) {
+    private fun handleIntent(intent: Intent?, isInitialCreate: Boolean) {
         val action = intent?.action
-        if (action == Intent.ACTION_VIEW ||
-            action == "com.android.camera.action.REVIEW" ||
-            action == "android.provider.MediaStore.ACTION_REVIEW"
-        ) {
-            initialUri = intent.dataString
+        when (action) {
+            Intent.ACTION_VIEW,
+            "com.android.camera.action.REVIEW",
+            "android.provider.MediaStore.ACTION_REVIEW" -> {
+                pickerConfig = null
+                if (isInitialCreate) {
+                    val dataUri = intent.data
+                    val scheme = dataUri?.scheme?.lowercase()
+                    if (scheme == "content" || scheme == "file") {
+                        initialUri = dataUri.toString()
+                    }
+                }
+            }
+            Intent.ACTION_PICK,
+            Intent.ACTION_GET_CONTENT -> {
+                initialUri = null
+                val allowMultiple = intent.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)
+                val mimeType = intent.type?.lowercase() ?: "*/*"
+                val filter = when {
+                    mimeType.startsWith("image/") -> MediaFilter.IMAGES
+                    mimeType.startsWith("video/") -> MediaFilter.VIDEOS
+                    else -> MediaFilter.ALL
+                }
+                pickerConfig = PickerConfig(
+                    allowMultiple = allowMultiple,
+                    initialFilter = filter
+                )
+            }
+            else -> {
+                pickerConfig = null
+            }
         }
+    }
+
+    private fun finishWithPickedMedia(images: List<GalleryImage>) {
+        if (images.isEmpty()) {
+            setResult(RESULT_CANCELED)
+            finish()
+            return
+        }
+        val uris = images.mapNotNull { runCatching { Uri.parse(it.uri) }.getOrNull() }
+        if (uris.isEmpty()) {
+            setResult(RESULT_CANCELED)
+            finish()
+            return
+        }
+        val resultIntent = Intent().apply {
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            if (uris.size == 1 && pickerConfig?.allowMultiple != true) {
+                data = uris.first()
+            }
+            val clip = ClipData.newUri(contentResolver, "Selected Media", uris.first())
+            for (i in 1 until uris.size) {
+                clip.addItem(ClipData.Item(uris[i]))
+            }
+            clipData = clip
+        }
+        setResult(RESULT_OK, resultIntent)
+        finish()
     }
 }

@@ -1,6 +1,8 @@
 package com.feraxhp.gallery.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MetadataItem(
     icon: ImageVector,
@@ -25,7 +28,9 @@ fun MetadataItem(
     value: String?,
     errorText: String = "Desconocido",
     onIconClick: (() -> Unit)? = null,
-    onValueClick: (() -> Unit)? = null
+    onValueClick: (() -> Unit)? = null,
+    onValueLongClick: (() -> Unit)? = null,
+    customValueContent: (@Composable () -> Unit)? = null
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -49,15 +54,27 @@ fun MetadataItem(
         }
         Column(
             modifier = Modifier
+                .weight(1f)
                 .padding(start = 16.dp)
-                .then(if (onValueClick != null) Modifier.clickable { onValueClick() } else Modifier)
+                .then(
+                    if (onValueClick != null || onValueLongClick != null) {
+                        Modifier.combinedClickable(
+                            onClick = { onValueClick?.invoke() },
+                            onLongClick = { onValueLongClick?.invoke() }
+                        )
+                    } else {
+                        Modifier
+                    }
+                )
         ) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary
             )
-            if (value != null) {
+            if (customValueContent != null) {
+                customValueContent()
+            } else if (value != null) {
                 Text(
                     text = value,
                     style = MaterialTheme.typography.bodyLarge

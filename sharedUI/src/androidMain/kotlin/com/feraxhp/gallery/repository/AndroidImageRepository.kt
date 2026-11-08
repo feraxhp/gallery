@@ -4,12 +4,15 @@ import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.database.ContentObserver
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
 import androidx.exifinterface.media.ExifInterface
@@ -17,8 +20,13 @@ import com.feraxhp.gallery.model.Album
 import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.model.MediaType
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
@@ -60,6 +68,39 @@ private fun isMotionPhotoXmp(xmpBlob: ByteArray?): Boolean {
 }
 
 class AndroidImageRepository(private val context: Context) : ImageRepository {
+    @OptIn(FlowPreview::class)
+    override val mediaChanges: Flow<Unit> = callbackFlow {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                trySend(Unit)
+            }
+
+            override fun onChange(selfChange: Boolean, uri: Uri?) {
+                trySend(Unit)
+            }
+        }
+        try {
+            context.contentResolver.registerContentObserver(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                true,
+                observer
+            )
+            context.contentResolver.registerContentObserver(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                true,
+                observer
+            )
+        } catch (e: Exception) {
+            Log.e("GalleryRepo", "Error registering ContentObserver: ${e.message}")
+        }
+        awaitClose {
+            try {
+                context.contentResolver.unregisterContentObserver(observer)
+            } catch (_: Exception) {
+            }
+        }
+    }.debounce(350.milliseconds)
+
     override suspend fun getImages(): List<GalleryImage> = getImagesInternal(null, null)
 
     override suspend fun getImagesByAlbum(albumId: String): List<GalleryImage> =
@@ -487,6 +528,29 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
         context.startActivity(chooser)
     }
 
+    override fun useImageAs(image: GalleryImage) {
+        try {
+            val uri = Uri.parse(image.uri)
+            val mimeType = context.contentResolver.getType(uri)
+                ?: if (image.type == MediaType.VIDEO) "video/*" else "image/*"
+            val attachIntent = Intent(Intent.ACTION_ATTACH_DATA).apply {
+                setDataAndType(uri, mimeType)
+                putExtra("mimeType", mimeType)
+                clipData = android.content.ClipData.newRawUri("", uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val chooser = Intent.createChooser(attachIntent, "Usar como").apply {
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                if (context !is android.app.Activity) {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            }
+            context.startActivity(chooser)
+        } catch (e: Exception) {
+            Log.e("GalleryRepo", "Error launching ACTION_ATTACH_DATA: ${e.message}")
+        }
+    }
+
     override suspend fun getImageById(id: Long, type: MediaType): GalleryImage? = withContext(Dispatchers.IO) {
         val uri = if (type == MediaType.VIDEO) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val selection = "${MediaStore.MediaColumns._ID} = ?"
@@ -739,6 +803,66 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
         // Similar a copyImage pero al álbum específico
         // Implementación simplificada
         copyImage(image) // Por ahora solo duplica
+    }
+
+    override suspend fun renameImage(image: GalleryImage, newName: String): GalleryImage? = withContext(Dispatchers.IO) {
+        try {
+            val sanitizedInput = newName.trim().replace("/", "_").replace("\\", "_")
+            if (sanitizedInput.isBlank()) return@withContext null
+
+            val ext = image.name.substringAfterLast('.', "")
+            val finalName = if (ext.isNotEmpty() && !sanitizedInput.endsWith(".$ext", ignoreCase = true)) {
+                "$sanitizedInput.$ext"
+            } else {
+                sanitizedInput
+            }
+            if (finalName == image.name) return@withContext image
+
+            val uri = Uri.parse(image.uri)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()) {
+                val sourceFile = image.path?.let { File(it) }
+                if (sourceFile != null && sourceFile.exists()) {
+                    val destFile = File(sourceFile.parentFile, finalName)
+                    if (!destFile.exists() && sourceFile.renameTo(destFile)) {
+                        val scanResult = suspendCoroutine<Uri?> { continuation ->
+                            MediaScannerConnection.scanFile(
+                                context,
+                                arrayOf(sourceFile.absolutePath, destFile.absolutePath),
+                                null
+                            ) { scannedPath, scannedUri ->
+                                if (scannedPath == destFile.absolutePath) {
+                                    continuation.resume(scannedUri)
+                                }
+                            }
+                        }
+                        if (scanResult != null) {
+                            return@withContext runCatching {
+                                val newId = ContentUris.parseId(scanResult)
+                                getImageById(newId, image.type)
+                            }.getOrNull() ?: image.copy(
+                                name = finalName,
+                                uri = scanResult.toString(),
+                                path = destFile.absolutePath
+                            )
+                        }
+                        return@withContext image.copy(name = finalName, path = destFile.absolutePath)
+                    }
+                }
+            }
+
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, finalName)
+            }
+            val rowsUpdated = context.contentResolver.update(uri, values, null, null)
+            if (rowsUpdated > 0) {
+                return@withContext getImageById(image.id, image.type) ?: image.copy(name = finalName)
+            }
+            null
+        } catch (e: Exception) {
+            Log.e("GalleryRepo", "Error renaming image: ${e.message}")
+            null
+        }
     }
 
     override suspend fun createAlbum(name: String): Album? = withContext(Dispatchers.IO) {

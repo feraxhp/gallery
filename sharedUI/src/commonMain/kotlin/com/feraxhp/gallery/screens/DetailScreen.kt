@@ -66,8 +66,11 @@ fun DetailScreen(
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onShare: () -> Unit,
+    onUseAs: () -> Unit = {},
     onMoveToAlbum: () -> Unit,
     onDelete: () -> Unit,
+    onRenameImage: suspend (GalleryImage, String) -> GalleryImage? = { _, _ -> null },
+    onPickConfirm: ((GalleryImage) -> Unit)? = null,
     topPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val safeInitialIndex = initialIndex.coerceIn(0, (images.size - 1).coerceAtLeast(0))
@@ -178,17 +181,43 @@ fun DetailScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = onEdit) {
-                            Icon(Icons.Default.Edit, contentDescription = "Editar")
-                        }
-                        IconButton(onClick = onShare) {
-                            Icon(Icons.Default.Share, contentDescription = "Compartir")
-                        }
-                        IconButton(onClick = onMoveToAlbum) {
-                            Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = "Mover")
-                        }
-                        IconButton(onClick = onDelete) {
-                            Icon(Icons.Default.Delete, contentDescription = "Borrar")
+                        if (onPickConfirm != null) {
+                            FilledTonalButton(
+                                onClick = {
+                                    val activeImage = images.getOrNull(pagerState.currentPage)
+                                    if (activeImage != null) {
+                                        onPickConfirm(activeImage)
+                                    }
+                                },
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = "Seleccionar",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text("Seleccionar")
+                            }
+                        } else {
+                            val activeImage = images.getOrNull(pagerState.currentPage)
+                            if (activeImage?.type == MediaType.IMAGE) {
+                                IconButton(onClick = onUseAs) {
+                                    Icon(Icons.Default.Wallpaper, contentDescription = "Usar como...")
+                                }
+                            }
+                            IconButton(onClick = onEdit) {
+                                Icon(Icons.Default.Edit, contentDescription = "Editar")
+                            }
+                            IconButton(onClick = onShare) {
+                                Icon(Icons.Default.Share, contentDescription = "Compartir")
+                            }
+                            IconButton(onClick = onMoveToAlbum) {
+                                Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = "Mover")
+                            }
+                            IconButton(onClick = onDelete) {
+                                Icon(Icons.Default.Delete, contentDescription = "Borrar")
+                            }
                         }
                     }
                 )
@@ -244,6 +273,7 @@ fun DetailScreen(
                             image = activeImage,
                             repository = repository,
                             isMetadataLoading = isMetadataLoading,
+                            onRenameImage = onRenameImage,
                             onDismiss = { showBottomSheet = false }
                         )
                     }
@@ -719,10 +749,18 @@ private fun MetadataBottomSheet(
     image: GalleryImage,
     repository: ImageRepository,
     isMetadataLoading: Boolean = false,
+    onRenameImage: suspend (GalleryImage, String) -> GalleryImage? = { _, _ -> null },
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     val clipboardManager = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
+    var isRenaming by remember(image.id) { mutableStateOf(false) }
+    var renameBaseText by remember(image.id, image.name) {
+        mutableStateOf(image.name.substringBeforeLast('.', image.name))
+    }
+    var isSavingRename by remember { mutableStateOf(false) }
+    val extension = remember(image.name) { image.name.substringAfterLast('.', "") }
     
     val copyToClipboard = { text: String? ->
         if (text != null) {
@@ -833,9 +871,68 @@ private fun MetadataBottomSheet(
             MetadataSection(title = "Archivo") {
                 MetadataItem(
                     icon = Icons.Default.Description,
-                    label = "Nombre",
+                    label = "Nombre (mantén presionado para renombrar)",
                     value = image.name,
-                    onIconClick = { copyToClipboard(image.name) }
+                    onIconClick = { copyToClipboard(image.name) },
+                    onValueLongClick = {
+                        renameBaseText = image.name.substringBeforeLast('.', image.name)
+                        isRenaming = true
+                    },
+                    customValueContent = if (isRenaming) {
+                        {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = renameBaseText,
+                                    onValueChange = { renameBaseText = it },
+                                    singleLine = true,
+                                    enabled = !isSavingRename,
+                                    modifier = Modifier.weight(1f),
+                                    suffix = if (extension.isNotEmpty()) {
+                                        { Text(".$extension") }
+                                    } else null
+                                )
+                                IconButton(
+                                    enabled = !isSavingRename && renameBaseText.isNotBlank(),
+                                    onClick = {
+                                        val trimmed = renameBaseText.trim()
+                                        if (trimmed.isNotEmpty()) {
+                                            scope.launch {
+                                                isSavingRename = true
+                                                try {
+                                                    onRenameImage(image, trimmed)
+                                                    isRenaming = false
+                                                } finally {
+                                                    isSavingRename = false
+                                                }
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Guardar nombre",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                IconButton(
+                                    enabled = !isSavingRename,
+                                    onClick = { isRenaming = false }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Cancelar",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    } else null
                 )
                 MetadataItem(
                     icon = Icons.Default.Folder,

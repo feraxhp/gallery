@@ -4,12 +4,17 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
@@ -20,8 +25,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -29,6 +36,7 @@ import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onLayoutRectChanged
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
@@ -42,8 +50,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlin.math.exp
+import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
 
 data class DragSelectionInfo(
@@ -73,7 +84,9 @@ fun GalleryGrid(
     gridModifier: Modifier = Modifier,
     initialScrollIndex: Int = 0,
     initialScrollOffset: Int = 0,
-    onScrollChanged: (Int, Int) -> Unit = { _, _ -> }
+    onScrollChanged: (Int, Int) -> Unit = { _, _ -> },
+    onImageLongClick: ((GalleryImage, List<GalleryImage>) -> Unit)? = null,
+    enableMultiSelectDrag: Boolean = true
 ) {
     var savedScrollIndex by rememberSaveable { mutableIntStateOf(initialScrollIndex) }
     var savedScrollOffset by rememberSaveable { mutableIntStateOf(initialScrollOffset) }
@@ -237,6 +250,17 @@ fun GalleryGrid(
         }
     }
 
+    val itemDates = remember(groupedImages) {
+        buildList {
+            groupedImages.forEach { (date, imagesInDate) ->
+                add(date)
+                repeat(imagesInDate.size) {
+                    add(date)
+                }
+            }
+        }
+    }
+
     if (isLoading && images.isEmpty()) {
         Box(
             modifier = modifier.fillMaxSize(),
@@ -251,7 +275,8 @@ fun GalleryGrid(
                     val pos = layoutBounds.positionInRoot
                     galleryOffset = Offset(pos.x.toFloat(), pos.y.toFloat())
                 }
-                .pointerInput(Unit) {
+                .pointerInput(enableMultiSelectDrag) {
+                    if (!enableMultiSelectDrag) return@pointerInput
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -261,7 +286,8 @@ fun GalleryGrid(
                         }
                     }
                 }
-                .pointerInput(Unit) {
+                .pointerInput(enableMultiSelectDrag) {
+                    if (!enableMultiSelectDrag) return@pointerInput
                     detectDragGesturesAfterLongPress(
                         onDragStart = { offset ->
                             val rootOffset = galleryOffset + offset
@@ -365,6 +391,7 @@ fun GalleryGrid(
                                 isSelected = image.id in selectedImageIds,
                                 isSelectionMode = isSelectionMode,
                                 fallbackShape = fallbackShapes[shapeIdx],
+                                onImageLongClick = onImageLongClick,
                                 onPositioned = { rect ->
                                     imageBounds[image.id] = rect
                                 },
@@ -388,6 +415,20 @@ fun GalleryGrid(
                         }
                     }
                 }
+            }
+
+            // Fast Scroller con forma de gota de distribución normal y píldora de fecha
+            if (itemDates.size > 12) {
+                GaussianFastScroller(
+                    gridState = gridState,
+                    itemDates = itemDates,
+                    topPadding = topPadding,
+                    bottomPadding = 110.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .zIndex(5f)
+                )
             }
             
             // Capa de efectos visuales (Reunión y Shatter)
@@ -454,6 +495,211 @@ fun GalleryGrid(
                             }
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+private fun formatSpanishDate(date: LocalDate): String {
+    val monthName = when (date.month) {
+        kotlinx.datetime.Month.JANUARY -> "enero"
+        kotlinx.datetime.Month.FEBRUARY -> "febrero"
+        kotlinx.datetime.Month.MARCH -> "marzo"
+        kotlinx.datetime.Month.APRIL -> "abril"
+        kotlinx.datetime.Month.MAY -> "mayo"
+        kotlinx.datetime.Month.JUNE -> "junio"
+        kotlinx.datetime.Month.JULY -> "julio"
+        kotlinx.datetime.Month.AUGUST -> "agosto"
+        kotlinx.datetime.Month.SEPTEMBER -> "septiembre"
+        kotlinx.datetime.Month.OCTOBER -> "octubre"
+        kotlinx.datetime.Month.NOVEMBER -> "noviembre"
+        kotlinx.datetime.Month.DECEMBER -> "diciembre"
+    }
+    return "${date.day} de $monthName de ${date.year}"
+}
+
+@Composable
+private fun GaussianFastScroller(
+    gridState: LazyGridState,
+    itemDates: List<LocalDate>,
+    topPadding: Dp,
+    bottomPadding: Dp,
+    modifier: Modifier = Modifier
+) {
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    var trackHeightPx by remember { mutableIntStateOf(0) }
+    var isDragging by remember { mutableStateOf(false) }
+    var dragFraction by remember { mutableFloatStateOf(0f) }
+    var isRecentlyScrolled by remember { mutableStateOf(false) }
+
+    val isScrollInProgress by remember {
+        derivedStateOf { gridState.isScrollInProgress }
+    }
+
+    LaunchedEffect(isScrollInProgress, isDragging) {
+        if (isScrollInProgress || isDragging) {
+            isRecentlyScrolled = true
+        } else {
+            delay(1500.milliseconds)
+            if (!gridState.isScrollInProgress && !isDragging) {
+                isRecentlyScrolled = false
+            }
+        }
+    }
+
+    val scrollFraction by remember(itemDates.size) {
+        derivedStateOf {
+            val totalItems = itemDates.size
+            if (totalItems <= 1) {
+                0f
+            } else {
+                val visibleCount = gridState.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1)
+                val maxScrollIndex = (totalItems - visibleCount).coerceAtLeast(1)
+                (gridState.firstVisibleItemIndex.toFloat() / maxScrollIndex.toFloat()).coerceIn(0f, 1f)
+            }
+        }
+    }
+
+    val activeFraction = if (isDragging) dragFraction else scrollFraction
+
+    val currentDateText by remember(itemDates) {
+        derivedStateOf {
+            if (itemDates.isEmpty()) ""
+            else {
+                val idx = if (isDragging) {
+                    (dragFraction * (itemDates.size - 1)).roundToInt().coerceIn(0, itemDates.lastIndex)
+                } else {
+                    gridState.firstVisibleItemIndex.coerceIn(0, itemDates.lastIndex)
+                }
+                formatSpanishDate(itemDates[idx])
+            }
+        }
+    }
+
+    val dropletHeightDp = 96.dp
+    val dropletWidthDp = 36.dp
+    val dropletHeightPx = with(density) { dropletHeightDp.toPx() }
+
+    val peakScale by animateFloatAsState(
+        targetValue = if (isDragging) 1f else 0.78f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "dropletPeakScale"
+    )
+
+    val dropletColor = MaterialTheme.colorScheme.primaryContainer
+    val iconTint = MaterialTheme.colorScheme.onPrimaryContainer
+
+    Box(
+        modifier = modifier
+            .padding(top = topPadding + 12.dp, bottom = bottomPadding)
+            .width(260.dp)
+            .onSizeChanged { trackHeightPx = it.height }
+    ) {
+        val usableTrackPx = (trackHeightPx - dropletHeightPx).coerceAtLeast(1f)
+        val currentThumbY = (activeFraction * usableTrackPx).roundToInt()
+
+        AnimatedVisibility(
+            visible = isRecentlyScrolled || isDragging,
+            enter = fadeIn(tween(200)) + slideInHorizontally(tween(220)) { it },
+            exit = fadeOut(tween(300)) + slideOutHorizontally(tween(250)) { it },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset { IntOffset(0, currentThumbY) }
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End
+            ) {
+                AnimatedVisibility(
+                    visible = isDragging && currentDateText.isNotEmpty(),
+                    enter = fadeIn(tween(150)) + scaleIn(tween(150), initialScale = 0.85f),
+                    exit = fadeOut(tween(150)) + scaleOut(tween(150), targetScale = 0.85f)
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        shadowElevation = 6.dp,
+                        tonalElevation = 4.dp,
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Text(
+                            text = currentDateText,
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+
+                // Gota con forma de curva de distribución normal (Gaussiana) pegada al borde derecho
+                Box(
+                    modifier = Modifier
+                        .size(width = dropletWidthDp, height = dropletHeightDp)
+                        .pointerInput(itemDates.size, usableTrackPx) {
+                            detectVerticalDragGestures(
+                                onDragStart = {
+                                    isDragging = true
+                                    dragFraction = scrollFraction
+                                },
+                                onVerticalDrag = { change, dragAmount ->
+                                    change.consume()
+                                    val deltaFraction = dragAmount / usableTrackPx
+                                    val newFraction = (dragFraction + deltaFraction).coerceIn(0f, 1f)
+                                    dragFraction = newFraction
+                                    val targetIndex = (newFraction * (itemDates.size - 1))
+                                        .roundToInt()
+                                        .coerceIn(0, (itemDates.size - 1).coerceAtLeast(0))
+                                    scope.launch {
+                                        gridState.scrollToItem(targetIndex)
+                                    }
+                                },
+                                onDragEnd = { isDragging = false },
+                                onDragCancel = { isDragging = false }
+                            )
+                        }
+                        .drawWithCache {
+                            val w = size.width
+                            val h = size.height
+                            val mu = h / 2f
+                            val sigma = h / 5.2f
+                            val maxRadius = w * peakScale
+                            val edgeT = (h / 2f) / sigma
+                            val baseBell = exp(-0.5f * edgeT * edgeT)
+                            val normFactor = (1f - baseBell).coerceAtLeast(0.001f)
+
+                            val path = Path().apply {
+                                moveTo(w, 0f)
+                                val steps = 36
+                                for (i in 0..steps) {
+                                    val y = (i.toFloat() / steps) * h
+                                    val t = (y - mu) / sigma
+                                    val bell = ((exp(-0.5f * t * t) - baseBell) / normFactor).coerceIn(0f, 1f)
+                                    val x = w - maxRadius * bell
+                                    lineTo(x, y)
+                                }
+                                lineTo(w, h)
+                                close()
+                            }
+
+                            onDrawBehind {
+                                drawPath(
+                                    path = path,
+                                    color = dropletColor
+                                )
+                            }
+                        },
+                    contentAlignment = Alignment.CenterEnd
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.UnfoldMore,
+                        contentDescription = "Desplazamiento rápido",
+                        tint = iconTint,
+                        modifier = Modifier
+                            .padding(end = 3.dp)
+                            .size(20.dp)
+                    )
                 }
             }
         }

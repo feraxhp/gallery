@@ -71,6 +71,8 @@ import androidx.navigation3.runtime.metadata
 import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import androidx.navigation3.ui.NavDisplay
 import com.feraxhp.gallery.model.GalleryImage
+import com.feraxhp.gallery.model.MediaFilter
+import com.feraxhp.gallery.model.PickerConfig
 import com.feraxhp.gallery.navigation.Destination
 import com.feraxhp.gallery.repository.ImageRepository
 import com.feraxhp.gallery.screens.AlbumGalleryScreen
@@ -135,6 +137,9 @@ fun App(
     hasWritePermission: Boolean,
     initialMediaUri: String? = null,
     onUriConsumed: () -> Unit = {},
+    pickerConfig: PickerConfig? = null,
+    onPickResult: (List<GalleryImage>) -> Unit = {},
+    onCancelPicker: () -> Unit = {},
     onRequestReadPermission: () -> Unit,
     onRequestWritePermission: () -> Unit
 ) {
@@ -157,10 +162,28 @@ fun App(
     val currentReadPermission by rememberUpdatedState(hasReadPermission)
     val currentWritePermission by rememberUpdatedState(hasWritePermission)
 
-    val homeViewModel: GalleryViewModel = viewModel(key = "home_gallery") { GalleryViewModel(repository) }
+    val homeViewModel: GalleryViewModel = viewModel(key = "home_gallery") {
+        GalleryViewModel(
+            repository = repository,
+            initialFilter = pickerConfig?.initialFilter ?: MediaFilter.ALL
+        )
+    }
+
+    LaunchedEffect(pickerConfig) {
+        if (pickerConfig != null) {
+            homeViewModel.setMediaFilter(pickerConfig.initialFilter)
+        }
+    }
+
     val activeAlbumDest = backStack.lastOrNull { it is Destination.AlbumGallery } as? Destination.AlbumGallery
     val albumViewModel: GalleryViewModel? = if (activeAlbumDest != null) {
-        viewModel(key = "album_${activeAlbumDest.albumId}") { GalleryViewModel(repository, activeAlbumDest.albumId) }
+        viewModel(key = "album_${activeAlbumDest.albumId}") {
+            GalleryViewModel(
+                repository = repository,
+                albumId = activeAlbumDest.albumId,
+                initialFilter = pickerConfig?.initialFilter ?: MediaFilter.ALL
+            )
+        }
     } else {
         null
     }
@@ -427,14 +450,23 @@ fun App(
                                     },
                                     onDeleteImages = {
                                         showDeleteConfirmation = true
-                                    }
+                                    },
+                                    pickerConfig = pickerConfig,
+                                    onPickImages = onPickResult,
+                                    onCancelPicker = onCancelPicker
                                 )
                             }
 
                             is Destination.AlbumGallery -> NavEntry(key, contentKey = key.contentKey) {
                                 LaunchedEffect(Unit) { isDetailActive = false }
                                 val animatedVisibilityScope = LocalNavAnimatedContentScope.current
-                                val viewModel: GalleryViewModel = viewModel(key = "album_${key.albumId}") { GalleryViewModel(repository, key.albumId) }
+                                val viewModel: GalleryViewModel = viewModel(key = "album_${key.albumId}") {
+                                    GalleryViewModel(
+                                        repository = repository,
+                                        albumId = key.albumId,
+                                        initialFilter = pickerConfig?.initialFilter ?: MediaFilter.ALL
+                                    )
+                                }
                                 AlbumGalleryScreen(
                                     viewModel = viewModel,
                                     albumId = key.albumId,
@@ -461,7 +493,9 @@ fun App(
                                         showDeleteConfirmation = true
                                     },
                                     sharedTransitionScope = this@SharedTransitionLayout,
-                                    animatedVisibilityScope = animatedVisibilityScope
+                                    animatedVisibilityScope = animatedVisibilityScope,
+                                    pickerConfig = pickerConfig,
+                                    onPickImages = onPickResult
                                 )
                             }
 
@@ -525,6 +559,10 @@ fun App(
                                         val img = currentImageInDetail ?: key.image
                                         repository.shareImage(img)
                                     },
+                                    onUseAs = {
+                                        val img = currentImageInDetail ?: key.image
+                                        repository.useImageAs(img)
+                                    },
                                     onMoveToAlbum = {
                                         val img = currentImageInDetail ?: key.image
                                         backStack = backStack + Destination.MoveToAlbum(
@@ -534,7 +572,32 @@ fun App(
                                     },
                                     onDelete = {
                                         showDeleteConfirmation = true
-                                    }
+                                    },
+                                    onRenameImage = { image, newName ->
+                                        val updated = activeActionHandler.renameImage(image, newName)
+                                        if (updated != null) {
+                                            currentImageInDetail = updated
+                                            homeViewModel.upsertImage(updated)
+                                            albumViewModel?.upsertImage(updated)
+                                            if (backStack.lastOrNull() is Destination.Detail) {
+                                                val detailDest = backStack.last() as Destination.Detail
+                                                backStack = backStack.dropLast(1) + detailDest.copy(image = updated)
+                                            }
+                                            scope.launch {
+                                                snackbarHostState.currentSnackbarData?.dismiss()
+                                                snackbarHostState.showSnackbar("Renombrado a ${updated.name}")
+                                            }
+                                        } else {
+                                            scope.launch {
+                                                snackbarHostState.currentSnackbarData?.dismiss()
+                                                snackbarHostState.showSnackbar("Error al renombrar")
+                                            }
+                                        }
+                                        updated
+                                    },
+                                    onPickConfirm = if (pickerConfig != null) {
+                                        { pickedImage -> onPickResult(listOf(pickedImage)) }
+                                    } else null
                                 )
                             }
 

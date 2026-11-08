@@ -27,6 +27,11 @@ class AlbumsViewModel(private val repository: ImageRepository) : ViewModel() {
 
     init {
         loadAlbums()
+        viewModelScope.launch {
+            repository.mediaChanges.collect {
+                loadAlbums()
+            }
+        }
     }
 
     fun loadAlbums() {

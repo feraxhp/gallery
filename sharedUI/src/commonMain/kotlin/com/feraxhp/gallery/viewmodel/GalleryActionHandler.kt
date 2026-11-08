@@ -15,6 +15,7 @@ interface GalleryActionHandler {
     fun restoreImage(imageId: Long)
     fun restoreSelection(imageIds: Set<Long>)
     fun upsertImage(image: GalleryImage)
+    suspend fun renameImage(image: GalleryImage, newName: String): GalleryImage?
     fun clearSelection()
     fun clearDeletedState()
     fun loadImages(force: Boolean = false)

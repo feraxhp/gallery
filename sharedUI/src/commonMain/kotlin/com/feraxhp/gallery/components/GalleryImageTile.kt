@@ -2,8 +2,10 @@ package com.feraxhp.gallery.components
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CornerSize
@@ -98,7 +100,11 @@ enum class Type {
 
 
 @Suppress("RememberReturnType")
-@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(
+    ExperimentalSharedTransitionApi::class,
+    ExperimentalMaterial3ExpressiveApi::class,
+    ExperimentalFoundationApi::class
+)
 @Composable
 fun GalleryImageTile(
     image: GalleryImage,
@@ -114,6 +120,7 @@ fun GalleryImageTile(
     isSelected: Boolean = false,
     isSelectionMode: Boolean = false,
     fallbackShape: Shape? = null,
+    onImageLongClick: ((GalleryImage, List<GalleryImage>) -> Unit)? = null,
 ) {
     val haptic = LocalHapticFeedback.current
     val index = remember(image.id) { (image.id.toULong() % 12uL).toInt() }
@@ -166,14 +173,33 @@ fun GalleryImageTile(
                         Type.ERROR -> { MaterialTheme.colorScheme.errorContainer }
                     }
                 )
-                .clickable {
-                    if (isSelectionMode) {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onToggleSelection(image)
+                .then(
+                    if (onImageLongClick != null) {
+                        Modifier.combinedClickable(
+                            onClick = {
+                                if (isSelectionMode) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onToggleSelection(image)
+                                } else {
+                                    onImageClick(image, allImages)
+                                }
+                            },
+                            onLongClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onImageLongClick(image, allImages)
+                            }
+                        )
                     } else {
-                        onImageClick(image, allImages)
+                        Modifier.clickable {
+                            if (isSelectionMode) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onToggleSelection(image)
+                            } else {
+                                onImageClick(image, allImages)
+                            }
+                        }
                     }
-                },
+                ),
             contentAlignment = Alignment.Center
         ) {
             if(state != Type.LOADED) {

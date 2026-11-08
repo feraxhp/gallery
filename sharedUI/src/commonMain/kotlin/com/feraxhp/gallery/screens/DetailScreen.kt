@@ -351,9 +351,18 @@ private fun DetailImageItem(
     val offsetX = remember { Animatable(0f) }
     val offsetY = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
+    var gestureJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     var loadedAspectRatio by remember(image.uri, image.width, image.height) {
         mutableFloatStateOf(if (image.width > 0 && image.height > 0) image.aspectRatio else 0f)
+    }
+
+    val effectiveAspect = if (loadedAspectRatio > 0f) {
+        loadedAspectRatio
+    } else if (image.width > 0 && image.height > 0) {
+        image.aspectRatio
+    } else {
+        0f
     }
 
     var videoActive by remember { mutableStateOf(false) }
@@ -381,6 +390,7 @@ private fun DetailImageItem(
                 onSetUiVisible(true)
             }
             if (scale.value != 1f || offsetX.value != 0f || offsetY.value != 0f) {
+                gestureJob?.cancel()
                 scale.snapTo(1f)
                 offsetX.snapTo(0f)
                 offsetY.snapTo(0f)
@@ -436,41 +446,61 @@ private fun DetailImageItem(
                         val touchSlop = viewConfiguration.touchSlop
 
                         awaitFirstDown(requireUnconsumed = false)
+                        var currentScale = scale.value
+                        var currentOffsetX = offsetX.value
+                        var currentOffsetY = offsetY.value
+
                         do {
                             val event = awaitPointerEvent()
                             val pressedCount = event.changes.count { it.pressed }
+                            if (pressedCount == 0) break
+
                             val zoomChange = event.calculateZoom()
                             val panChange = event.calculatePan()
                             val centroid = event.calculateCentroid()
 
-                            val currentScale = scale.value
-
                             if (pressedCount > 1 || currentScale > 1.01f || zoomChange != 1f || isZooming) {
                                 isZooming = true
 
-                                val newScale = (currentScale * zoomChange).coerceIn(1f, 6f)
+                                val newScale = (currentScale * zoomChange).coerceIn(1f, 600f)
                                 val actualZoomChange = if (currentScale > 0f) newScale / currentScale else 1f
 
-                                var zoomOffsetX = 0f
-                                var zoomOffsetY = 0f
+                                val rawTargetX: Float
+                                val rawTargetY: Float
 
-                                if (centroid != Offset.Unspecified) {
-                                    val center = Offset(size.width / 2f, size.height / 2f)
-                                    val centroidFromCenter = centroid - center
-                                    zoomOffsetX = (centroidFromCenter.x - offsetX.value) * (1f - actualZoomChange)
-                                    zoomOffsetY = (centroidFromCenter.y - offsetY.value) * (1f - actualZoomChange)
+                                if (newScale <= 1.001f) {
+                                    rawTargetX = 0f
+                                    rawTargetY = 0f
+                                } else if (actualZoomChange < 1f && currentScale > 1.001f) {
+                                    // Al reducir el zoom hacia 1x, interpolamos progresivamente la posición hacia el centro (0, 0)
+                                    val scaleProgress = ((newScale - 1f) / (currentScale - 1f)).coerceIn(0f, 1f)
+                                    rawTargetX = currentOffsetX * scaleProgress + panChange.x
+                                    rawTargetY = currentOffsetY * scaleProgress + panChange.y
+                                } else {
+                                    var zoomOffsetX = 0f
+                                    var zoomOffsetY = 0f
+                                    if (centroid != Offset.Unspecified) {
+                                        val center = Offset(size.width / 2f, size.height / 2f)
+                                        val centroidFromCenter = centroid - center
+                                        zoomOffsetX = (centroidFromCenter.x - currentOffsetX) * (1f - actualZoomChange)
+                                        zoomOffsetY = (centroidFromCenter.y - currentOffsetY) * (1f - actualZoomChange)
+                                    }
+                                    rawTargetX = currentOffsetX + zoomOffsetX + panChange.x
+                                    rawTargetY = currentOffsetY + zoomOffsetY + panChange.y
                                 }
 
-                                val rawTargetX = offsetX.value + zoomOffsetX + panChange.x
-                                val rawTargetY = offsetY.value + zoomOffsetY + panChange.y
                                 val clamped = clampZoomOffsets(
                                     scaleVal = newScale,
                                     rawOffsetX = rawTargetX,
                                     rawOffsetY = rawTargetY,
                                     viewportW = size.width.toFloat(),
                                     viewportH = size.height.toFloat(),
-                                    aspectRatio = loadedAspectRatio
+                                    aspectRatio = effectiveAspect
                                 )
+
+                                currentScale = newScale
+                                currentOffsetX = clamped.x
+                                currentOffsetY = clamped.y
 
                                 event.changes.forEach { change ->
                                     if (change.positionChanged()) {
@@ -478,10 +508,11 @@ private fun DetailImageItem(
                                     }
                                 }
 
-                                scope.launch {
-                                    scale.snapTo(newScale)
-                                    offsetX.snapTo(clamped.x)
-                                    offsetY.snapTo(clamped.y)
+                                gestureJob?.cancel()
+                                gestureJob = scope.launch {
+                                    scale.snapTo(currentScale)
+                                    offsetX.snapTo(currentOffsetX)
+                                    offsetY.snapTo(currentOffsetY)
                                 }
                             } else if (!isSwipingHorizontal) {
                                 totalPan += panChange
@@ -500,44 +531,51 @@ private fun DetailImageItem(
                                         }
                                     }
                                     accumulatedSwipeY += panChange.y
-                                    scope.launch {
-                                        offsetY.snapTo((offsetY.value + panChange.y).coerceAtLeast(0f))
+                                    currentOffsetY = (currentOffsetY + panChange.y).coerceAtLeast(0f)
+                                    gestureJob?.cancel()
+                                    gestureJob = scope.launch {
+                                        offsetY.snapTo(currentOffsetY)
                                     }
                                 }
                             }
                         } while (event.changes.any { it.pressed })
 
                         if (isZooming) {
-                            if (scale.value <= 1.03f) {
-                                scope.launch {
+                            if (currentScale <= 1.05f) {
+                                gestureJob?.cancel()
+                                gestureJob = scope.launch {
                                     launch { scale.animateTo(1f) }
                                     launch { offsetX.animateTo(0f) }
                                     launch { offsetY.animateTo(0f) }
                                 }
                             } else {
                                 val clamped = clampZoomOffsets(
-                                    scaleVal = scale.value,
-                                    rawOffsetX = offsetX.value,
-                                    rawOffsetY = offsetY.value,
+                                    scaleVal = currentScale,
+                                    rawOffsetX = currentOffsetX,
+                                    rawOffsetY = currentOffsetY,
                                     viewportW = size.width.toFloat(),
                                     viewportH = size.height.toFloat(),
-                                    aspectRatio = loadedAspectRatio
+                                    aspectRatio = effectiveAspect
                                 )
-                                scope.launch {
+                                gestureJob?.cancel()
+                                gestureJob = scope.launch {
                                     launch { offsetX.animateTo(clamped.x) }
                                     launch { offsetY.animateTo(clamped.y) }
                                 }
                             }
-                        } else if (scale.value <= 1.01f) {
-                            if (offsetY.value > 200f) {
+                        } else if (currentScale <= 1.01f) {
+                            if (currentOffsetY > 200f) {
                                 safeOnBack()
                             } else if (accumulatedSwipeY < -120f) {
                                 onSwipeUp()
-                                scope.launch {
-                                    offsetY.animateTo(0f)
+                                gestureJob?.cancel()
+                                gestureJob = scope.launch {
+                                    launch { offsetX.animateTo(0f) }
+                                    launch { offsetY.animateTo(0f) }
                                 }
-                            } else if (offsetY.value != 0f || offsetX.value != 0f) {
-                                scope.launch {
+                            } else if (currentOffsetY != 0f || currentOffsetX != 0f) {
+                                gestureJob?.cancel()
+                                gestureJob = scope.launch {
                                     launch { scale.animateTo(1f) }
                                     launch { offsetY.animateTo(0f) }
                                     launch { offsetX.animateTo(0f) }
@@ -558,8 +596,9 @@ private fun DetailImageItem(
                             }
                         },
                         onDoubleTap = { tapOffset ->
-                            scope.launch {
-                                if (scale.value > 1.03f) {
+                            gestureJob?.cancel()
+                            gestureJob = scope.launch {
+                                if (scale.value > 1.03f || abs(offsetX.value) > 1f || abs(offsetY.value) > 1f) {
                                     launch { scale.animateTo(1f) }
                                     launch { offsetX.animateTo(0f) }
                                     launch { offsetY.animateTo(0f) }
@@ -575,7 +614,7 @@ private fun DetailImageItem(
                                         rawOffsetY = rawTargetY,
                                         viewportW = size.width.toFloat(),
                                         viewportH = size.height.toFloat(),
-                                        aspectRatio = loadedAspectRatio
+                                        aspectRatio = effectiveAspect
                                     )
 
                                     launch { scale.animateTo(targetScale) }
@@ -599,7 +638,6 @@ private fun DetailImageItem(
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                val effectiveAspect = if (image.width > 0 && image.height > 0) image.aspectRatio else loadedAspectRatio
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -726,6 +764,14 @@ private fun DetailImageItem(
                     .padding(bottom = 32.dp, end = 16.dp)
             ) {
                 Surface(
+                    onClick = {
+                        gestureJob?.cancel()
+                        gestureJob = scope.launch {
+                            launch { scale.animateTo(1f) }
+                            launch { offsetX.animateTo(0f) }
+                            launch { offsetY.animateTo(0f) }
+                        }
+                    },
                     color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
                     shape = CircleShape,
                     tonalElevation = 4.dp

@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.model.ShatterData
+import com.feraxhp.gallery.navigation.LocalActiveDetailImageId
+import com.feraxhp.gallery.navigation.LocalIsBackgroundScene
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -382,6 +384,7 @@ fun GalleryGrid(
                         ) { image ->
                             val isGathering = image.id in imagesToGather
                             val isDeleted = image.id in deletedImageIds
+                            val isHiddenUnderDetail = LocalIsBackgroundScene.current && LocalActiveDetailImageId.current == image.id
                             val shapeIdx = (image.id.toULong() % 12uL).toInt()
                             GalleryImageTile(
                                 image = image,
@@ -409,7 +412,7 @@ fun GalleryGrid(
                                 modifier = Modifier
                                     .animateItem()
                                     .graphicsLayer {
-                                        alpha = if (isGathering || isDeleted) 0f else 1f
+                                        alpha = if (isGathering || isDeleted || isHiddenUnderDetail) 0f else 1f
                                     }
                             )
                         }

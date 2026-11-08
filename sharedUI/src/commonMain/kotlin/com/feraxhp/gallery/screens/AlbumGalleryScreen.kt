@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.feraxhp.gallery.components.GalleryGrid
 import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.model.PickerConfig
+import com.feraxhp.gallery.navigation.LocalIsBackgroundScene
 import com.feraxhp.gallery.util.BackHandler
 import com.feraxhp.gallery.viewmodel.GalleryViewModel
 
@@ -122,6 +123,7 @@ fun AlbumGalleryScreen(
             )
         }
     ) { padding ->
+        val isBackgroundScene = LocalIsBackgroundScene.current
         with(sharedTransitionScope) {
             GalleryGrid(
                 images = images,
@@ -160,13 +162,19 @@ fun AlbumGalleryScreen(
                     .clip(RoundedCornerShape(cornerRadius))
                     .background(MaterialTheme.colorScheme.surface),
                 gridModifier = Modifier
-                    .sharedBounds(
-                        sharedContentState = rememberSharedContentState(key = "album-$albumId"),
-                        animatedVisibilityScope = animatedVisibilityScope,
-                        boundsTransform = { _, _ -> tween(500) },
-                        clipInOverlayDuringTransition = OverlayClip(
-                            RoundedCornerShape(cornerRadius)
-                        )
+                    .then(
+                        if (!isBackgroundScene) {
+                            Modifier.sharedBounds(
+                                sharedContentState = rememberSharedContentState(key = "album-$albumId"),
+                                animatedVisibilityScope = animatedVisibilityScope,
+                                boundsTransform = { _, _ -> tween(500) },
+                                clipInOverlayDuringTransition = OverlayClip(
+                                    RoundedCornerShape(cornerRadius)
+                                )
+                            )
+                        } else {
+                            Modifier
+                        }
                     )
                     .clip(RoundedCornerShape(cornerRadius))
             )

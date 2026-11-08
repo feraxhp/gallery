@@ -1,7 +1,11 @@
 package com.feraxhp.gallery.navigation
 
+import androidx.compose.runtime.compositionLocalOf
 import com.feraxhp.gallery.model.GalleryImage
 import kotlinx.serialization.Serializable
+
+val LocalIsBackgroundScene = compositionLocalOf { false }
+val LocalActiveDetailImageId = compositionLocalOf<Long?> { null }
 
 @Serializable
 sealed interface Destination {

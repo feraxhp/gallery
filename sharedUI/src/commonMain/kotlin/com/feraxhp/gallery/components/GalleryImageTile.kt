@@ -48,6 +48,7 @@ import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.model.MediaType
+import com.feraxhp.gallery.navigation.LocalIsBackgroundScene
 import com.feraxhp.gallery.util.rememberThumbnailModel
 import com.feraxhp.gallery.util.toImageBitmap
 import gallery.sharedui.generated.resources.Res
@@ -140,8 +141,9 @@ fun GalleryImageTile(
         }
     }
 
+    val isBackgroundScene = LocalIsBackgroundScene.current
     val isTransitionActive = animatedVisibilityScope.transition.currentState != animatedVisibilityScope.transition.targetState
-    val attachSharedBounds = isVisibleInWindow || isTransitionActive
+    val attachSharedBounds = !isBackgroundScene && (isVisibleInWindow || isTransitionActive)
 
     with(sharedTransitionScope) {
         Box(

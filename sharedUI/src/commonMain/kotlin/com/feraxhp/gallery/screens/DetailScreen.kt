@@ -122,29 +122,29 @@ fun DetailScreen(
         }
     }
     
-    // El offset vertical de la página actual para el efecto de transparencia al cerrar
-    val pageOffsetsY = remember { mutableStateMapOf<Int, Float>() }
-    val currentOffsetY by remember {
+    // El porcentaje de desplazamiento vertical hacia abajo (0f..1f) de la página actual para volver transparente el fondo negro
+    val pageDragDownFractions = remember { mutableStateMapOf<Int, Float>() }
+    val currentDragDownFraction by remember {
         derivedStateOf {
-            pageOffsetsY[pagerState.currentPage] ?: 0f
+            (pageDragDownFractions[pagerState.currentPage] ?: 0f).coerceIn(0f, 1f)
         }
     }
 
-    // El fondo se vuelve transparente si el targetState ya no es Visible (gesto iniciado)
+    // El fondo se vuelve transparente proporcionalmente al % de movimiento hacia abajo o al cerrar
     val isVisible = animatedVisibilityScope.transition.targetState == EnterExitState.Visible
     val baseAlpha by animateFloatAsState(
         targetValue = if (isVisible) 1f else 0f,
         animationSpec = if (isVisible) tween(300) else tween(
-            durationMillis = 0,
+            durationMillis = 250,
             delayMillis = 0,
-            easing = EaseOutExpo,
+            easing = EaseOutCubic,
         ),
         label = "baseAlpha"
     )
 
-    val backgroundAlpha = (baseAlpha * (1f - (currentOffsetY / 600f).coerceIn(0f, 1f)))
+    val backgroundAlpha = (baseAlpha * (1f - currentDragDownFraction)).coerceIn(0f, 1f)
 
-    val showTopBar = isVisible && isUiVisible && !isTransitionRunning && userScrollEnabled && currentOffsetY < 10f
+    val showTopBar = isVisible && isUiVisible && !isTransitionRunning && userScrollEnabled && currentDragDownFraction < 0.02f
 
     Scaffold(
         containerColor = Color.Black.copy(alpha = backgroundAlpha),
@@ -256,8 +256,8 @@ fun DetailScreen(
                             onScaleChanged = { scale ->
                                 pageScales[page] = scale
                             },
-                            onOffsetYChanged = { offset ->
-                                pageOffsetsY[page] = offset
+                            onDragDownFractionChanged = { fraction ->
+                                pageDragDownFractions[page] = fraction
                             },
                             onSwipeUp = {
                                 showBottomSheet = true
@@ -329,7 +329,7 @@ private fun DetailImageItem(
     onToggleUi: () -> Unit,
     onSetUiVisible: (Boolean) -> Unit,
     onScaleChanged: (Float) -> Unit,
-    onOffsetYChanged: (Float) -> Unit,
+    onDragDownFractionChanged: (Float) -> Unit,
     onSwipeUp: () -> Unit
 ) {
     val model = rememberFullImageModel(
@@ -398,12 +398,25 @@ private fun DetailImageItem(
         }
     }
 
+    var viewportHeightPx by remember { mutableFloatStateOf(0f) }
+
     LaunchedEffect(scale.value) {
         onScaleChanged(scale.value)
     }
 
-    LaunchedEffect(offsetY.value) {
-        onOffsetYChanged(offsetY.value)
+    LaunchedEffect(offsetY.value, scale.value, viewportHeightPx) {
+        if (scale.value <= 1.01f && offsetY.value > 0f) {
+            // El 100% de transparencia se alcanza al desplazar la imagen hacia abajo un 35% de la altura de la pantalla
+            val maxDragDownDistance = if (viewportHeightPx > 0f) {
+                (viewportHeightPx * 0.35f).coerceAtLeast(280f)
+            } else {
+                450f
+            }
+            val fraction = (offsetY.value / maxDragDownDistance).coerceIn(0f, 1f)
+            onDragDownFractionChanged(fraction)
+        } else {
+            onDragDownFractionChanged(0f)
+        }
     }
 
     val cornerRadius by animateDpAsState(
@@ -437,6 +450,7 @@ private fun DetailImageItem(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(image.id) {
+                    viewportHeightPx = size.height.toFloat()
                     awaitEachGesture {
                         var isSwipingVertical = false
                         var isSwipingHorizontal = false

@@ -15,6 +15,7 @@
 package com.feraxhp.gallery
 
 import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
@@ -43,6 +44,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -68,12 +70,18 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.metadata
+import androidx.navigation3.scene.Scene
+import androidx.navigation3.scene.SceneStrategy
+import androidx.navigation3.scene.SceneStrategyScope
+import androidx.navigation3.scene.SinglePaneSceneStrategy
 import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import androidx.navigation3.ui.NavDisplay
 import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.model.MediaFilter
 import com.feraxhp.gallery.model.PickerConfig
 import com.feraxhp.gallery.navigation.Destination
+import com.feraxhp.gallery.navigation.LocalActiveDetailImageId
+import com.feraxhp.gallery.navigation.LocalIsBackgroundScene
 import com.feraxhp.gallery.repository.ImageRepository
 import com.feraxhp.gallery.screens.AlbumGalleryScreen
 import com.feraxhp.gallery.screens.DetailScreen
@@ -123,6 +131,55 @@ private val nullableGalleryImageSaver = Saver<GalleryImage?, String>(
         if (str.isBlank()) null else runCatching { appStateJson.decodeFromString<GalleryImage>(str) }.getOrNull()
     }
 )
+
+private data class DetailOverlayScene(
+    override val key: Any,
+    override val previousEntries: List<NavEntry<Destination>>,
+    val backgroundEntry: NavEntry<Destination>?,
+    val detailEntry: NavEntry<Destination>,
+    val activeDetailImageIdProvider: () -> Long?
+) : Scene<Destination> {
+    override val entries: List<NavEntry<Destination>> = listOf(detailEntry)
+    override val metadata: Map<String, Any> = detailEntry.metadata
+    override val content: @Composable () -> Unit = {
+        val animatedContentScope = LocalNavAnimatedContentScope.current
+        val isTransitionSettled =
+            animatedContentScope.transition.currentState == animatedContentScope.transition.targetState &&
+                animatedContentScope.transition.currentState == EnterExitState.Visible
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (isTransitionSettled && backgroundEntry != null) {
+                CompositionLocalProvider(
+                    LocalIsBackgroundScene provides true,
+                    LocalActiveDetailImageId provides activeDetailImageIdProvider()
+                ) {
+                    backgroundEntry.Content()
+                }
+            }
+            detailEntry.Content()
+        }
+    }
+}
+
+private class DetailSceneStrategy(
+    private val activeDetailImageIdProvider: () -> Long?
+) : SceneStrategy<Destination> {
+    override fun SceneStrategyScope<Destination>.calculateScene(
+        entries: List<NavEntry<Destination>>
+    ): Scene<Destination>? {
+        val lastEntry = entries.lastOrNull() ?: return null
+        if (lastEntry.contentKey.toString().startsWith("Detail:")) {
+            val bgEntry = entries.getOrNull(entries.size - 2)
+            return DetailOverlayScene(
+                key = lastEntry.contentKey,
+                previousEntries = entries.dropLast(1),
+                backgroundEntry = bgEntry,
+                detailEntry = lastEntry,
+                activeDetailImageIdProvider = activeDetailImageIdProvider
+            )
+        }
+        return null
+    }
+}
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @OptIn(
@@ -358,10 +415,17 @@ fun App(
         Box(
             modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)
         ) {
+            val sceneStrategies = remember {
+                listOf(
+                    DetailSceneStrategy { currentImageInDetail?.id },
+                    SinglePaneSceneStrategy()
+                )
+            }
             SharedTransitionLayout {
                 NavDisplay(
-                    modifier = Modifier.fillMaxSize().background(Color.Black),
+                    modifier = Modifier.fillMaxSize(),
                     backStack = backStack,
+                    sceneStrategies = sceneStrategies,
                     sharedTransitionScope = this,
                     onBack = {
                         if (backStack.size > 1) {
@@ -424,7 +488,10 @@ fun App(
                             }
 
                             Destination.Home -> NavEntry(key, contentKey = key.contentKey) {
-                                LaunchedEffect(Unit) { isDetailActive = false }
+                                val isBackgroundScene = LocalIsBackgroundScene.current
+                                LaunchedEffect(isBackgroundScene) {
+                                    if (!isBackgroundScene) isDetailActive = false
+                                }
                                 val animatedVisibilityScope = LocalNavAnimatedContentScope.current
 
                                 HomeScreen(
@@ -458,7 +525,10 @@ fun App(
                             }
 
                             is Destination.AlbumGallery -> NavEntry(key, contentKey = key.contentKey) {
-                                LaunchedEffect(Unit) { isDetailActive = false }
+                                val isBackgroundScene = LocalIsBackgroundScene.current
+                                LaunchedEffect(isBackgroundScene) {
+                                    if (!isBackgroundScene) isDetailActive = false
+                                }
                                 val animatedVisibilityScope = LocalNavAnimatedContentScope.current
                                 val viewModel: GalleryViewModel = viewModel(key = "album_${key.albumId}") {
                                     GalleryViewModel(
@@ -507,7 +577,7 @@ fun App(
                                         fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
                                     }
                                     put(NavDisplay.PopTransitionKey) {
-                                        fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
+                                        EnterTransition.None togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
                                     }
                                 }
                             ) {

@@ -148,10 +148,23 @@ fun DetailScreen(
         topBar = {
             AnimatedVisibility(
                 visible = showTopBar,
-                enter = fadeIn(),
-                exit = fadeOut()
+                enter = slideInVertically { -it } + fadeIn(),
+                exit = slideOutVertically { -it } + fadeOut()
             ) {
                 TopAppBar(
+                    modifier = Modifier.pointerInput(Unit) {
+                        var accumulatedDragY = 0f
+                        detectVerticalDragGestures(
+                            onDragStart = { accumulatedDragY = 0f },
+                            onVerticalDrag = { change, dragAmount ->
+                                accumulatedDragY += dragAmount
+                                if (accumulatedDragY < -15f || dragAmount < -10f) {
+                                    change.consume()
+                                    isUiVisible = false
+                                }
+                            }
+                        )
+                    },
                     title = { Text("Detalle") },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Black.copy(alpha = 0.5f),
@@ -208,9 +221,9 @@ fun DetailScreen(
                             isSharedElement = isSharedElement,
                             isCurrentPage = isCurrentPage,
                             isVisible = isVisible,
-                            showTopBar = showTopBar,
                             onBack = onBack,
                             onToggleUi = { isUiVisible = !isUiVisible },
+                            onSetUiVisible = { isUiVisible = it },
                             onScaleChanged = { scale ->
                                 pageScales[page] = scale
                             },
@@ -273,7 +286,7 @@ private fun clampZoomOffsets(
 }
 
 @androidx.annotation.OptIn(UnstableApi::class)
-@OptIn(ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun DetailImageItem(
     image: GalleryImage,
@@ -282,9 +295,9 @@ private fun DetailImageItem(
     isSharedElement: Boolean,
     isCurrentPage: Boolean,
     isVisible: Boolean,
-    showTopBar: Boolean,
     onBack: () -> Unit,
     onToggleUi: () -> Unit,
+    onSetUiVisible: (Boolean) -> Unit,
     onScaleChanged: (Float) -> Unit,
     onOffsetYChanged: (Float) -> Unit,
     onSwipeUp: () -> Unit
@@ -316,11 +329,26 @@ private fun DetailImageItem(
     var isPlaying by remember { mutableStateOf(false) }
     var currentTime by remember { mutableLongStateOf(0L) }
 
+    val toggleVideoPlayback = {
+        if (!videoActive) {
+            videoActive = true
+            isPlaying = true
+            onSetUiVisible(false)
+        } else {
+            val nextPlaying = !isPlaying
+            isPlaying = nextPlaying
+            onSetUiVisible(!nextPlaying)
+        }
+    }
+
     LaunchedEffect(isCurrentPage) {
         if (!isCurrentPage) {
-            videoActive = false
-            isPlaying = false
-            currentTime = 0L
+            if (videoActive || isPlaying) {
+                videoActive = false
+                isPlaying = false
+                currentTime = 0L
+                onSetUiVisible(true)
+            }
             if (scale.value != 1f || offsetX.value != 0f || offsetY.value != 0f) {
                 scale.snapTo(1f)
                 offsetX.snapTo(0f)
@@ -491,7 +519,11 @@ private fun DetailImageItem(
                     detectTapGestures(
                         onTap = {
                             if (isVisible) {
-                                onToggleUi()
+                                if (image.type == MediaType.VIDEO || image.isMotionPhoto) {
+                                    toggleVideoPlayback()
+                                } else {
+                                    onToggleUi()
+                                }
                             }
                         },
                         onDoubleTap = { tapOffset ->
@@ -589,18 +621,14 @@ private fun DetailImageItem(
                             isPlaying = isPlaying,
                             modifier = Modifier.fillMaxSize(),
                             onProgressUpdate = { currentTime = it },
-                            onVideoClick = { isPlaying = !isPlaying }
+                            onVideoClick = { toggleVideoPlayback() }
                         )
                     }
                 }
             }
 
-            // Píldoras de UI - Posición fija por encima del objeto con zoom
+            // Píldoras de UI - Posición fija debajo del espacio del TopAppBar sin moverse al ocultar/mostrar
             val isTransitionRunning = animatedVisibilityScope.transition.currentState != animatedVisibilityScope.transition.targetState
-            val pillTopPadding by animateDpAsState(
-                targetValue = if (showTopBar) 104.dp else 44.dp,
-                label = "pillTopPadding"
-            )
 
             AnimatedVisibility(
                 visible = (image.type == MediaType.VIDEO || image.isMotionPhoto) && isVisible && !isTransitionRunning,
@@ -608,7 +636,8 @@ private fun DetailImageItem(
                 exit = fadeOut(tween(300)),
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(top = pillTopPadding, start = 16.dp)
+                    .statusBarsPadding()
+                    .padding(top = TopAppBarDefaults.TopAppBarExpandedHeight + 12.dp, start = 16.dp)
             ) {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -617,14 +646,7 @@ private fun DetailImageItem(
                         modifier = Modifier
                             .clip(RoundedCornerShape(20.dp))
                             .background(Color.Black.copy(alpha = 0.55f))
-                            .clickable {
-                                if (!videoActive) {
-                                    videoActive = true
-                                    isPlaying = true
-                                } else {
-                                    isPlaying = !isPlaying
-                                }
-                            }
+                            .clickable { toggleVideoPlayback() }
                             .padding(horizontal = 10.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -649,10 +671,7 @@ private fun DetailImageItem(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(Color.Black.copy(alpha = 0.55f))
-                                .clickable {
-                                    videoActive = true
-                                    isPlaying = true
-                                }
+                                .clickable { toggleVideoPlayback() }
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                             contentAlignment = Alignment.Center
                         ) {

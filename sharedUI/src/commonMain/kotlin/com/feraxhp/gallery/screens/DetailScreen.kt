@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,14 +26,15 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
-import androidx.media3.common.util.Log
 import androidx.media3.common.util.UnstableApi
 import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
 import com.feraxhp.gallery.components.MapPreview
 import com.feraxhp.gallery.components.MetadataItem
 import com.feraxhp.gallery.components.MetadataSection
@@ -68,21 +70,38 @@ fun DetailScreen(
     onDelete: () -> Unit,
     topPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
-    val pagerState = rememberPagerState(initialPage = initialIndex) { images.size }
-    val scope = rememberCoroutineScope()
-    var showBottomSheet by remember { mutableStateOf(false) }
+    val safeInitialIndex = initialIndex.coerceIn(0, (images.size - 1).coerceAtLeast(0))
+    val pagerState = rememberPagerState(initialPage = safeInitialIndex) { images.size }
+    var showBottomSheet by rememberSaveable { mutableStateOf(false) }
+    var isUiVisible by rememberSaveable { mutableStateOf(true) }
+    var lastSyncedListSize by remember { mutableIntStateOf(images.size) }
+    var isProgrammaticScroll by remember { mutableStateOf(false) }
 
     LaunchedEffect(selectedImageId, images.size) {
-        if (selectedImageId != null && images.isNotEmpty()) {
-            val targetIndex = images.indexOfFirst { it.id == selectedImageId }
+        if (images.isNotEmpty()) {
+            val targetId = selectedImageId ?: images.getOrNull(safeInitialIndex)?.id
+            val targetIndex = if (targetId != null) images.indexOfFirst { it.id == targetId } else safeInitialIndex
             if (targetIndex >= 0 && targetIndex != pagerState.currentPage) {
-                pagerState.animateScrollToPage(targetIndex)
+                isProgrammaticScroll = true
+                try {
+                    if (lastSyncedListSize <= 1 && images.size > 1) {
+                        pagerState.scrollToPage(targetIndex)
+                    } else {
+                        pagerState.animateScrollToPage(targetIndex)
+                    }
+                } finally {
+                    isProgrammaticScroll = false
+                }
             }
+            lastSyncedListSize = images.size
         }
     }
 
-    LaunchedEffect(pagerState.currentPage, images) {
-        if (images.isNotEmpty() && pagerState.currentPage in images.indices) {
+    LaunchedEffect(pagerState.currentPage, images, isProgrammaticScroll) {
+        if (!isProgrammaticScroll && images.isNotEmpty() && pagerState.currentPage in images.indices) {
+            if (lastSyncedListSize <= 1 && images.size > 1 && selectedImageId != null && images[pagerState.currentPage].id != selectedImageId) {
+                return@LaunchedEffect
+            }
             val currentImage = images[pagerState.currentPage]
             onImageChange(currentImage)
             onLoadMetadata(currentImage)
@@ -122,7 +141,7 @@ fun DetailScreen(
 
     val backgroundAlpha = (baseAlpha * (1f - (currentOffsetY / 600f).coerceIn(0f, 1f)))
 
-    val showTopBar = isVisible && !isTransitionRunning && userScrollEnabled && currentOffsetY < 10f
+    val showTopBar = isVisible && isUiVisible && !isTransitionRunning && userScrollEnabled && currentOffsetY < 10f
 
     Scaffold(
         containerColor = Color.Black.copy(alpha = backgroundAlpha),
@@ -167,52 +186,90 @@ fun DetailScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(bottom = innerPadding.calculateBottomPadding()), // Apply only bottom padding
+                    .padding(bottom = innerPadding.calculateBottomPadding()),
                 contentAlignment = Alignment.Center
             ) {
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxSize(),
-                    userScrollEnabled = userScrollEnabled,
-                    key = { images[it].id },
-                    pageSpacing = 16.dp
-                ) { page ->
-                    val isSharedElement = if (isVisible) {
-                        if (isTransitionRunning) page == initialIndex else page == pagerState.currentPage
-                    } else {
-                        page == pagerState.currentPage
-                    }
+                if (images.isNotEmpty()) {
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize(),
+                        userScrollEnabled = userScrollEnabled,
+                        key = { page -> images.getOrNull(page)?.id ?: page.toLong() },
+                        pageSpacing = 16.dp
+                    ) { page ->
+                        val pageImage = images.getOrNull(page) ?: return@HorizontalPager
+                        val isCurrentPage = page == pagerState.currentPage
+                        val isSharedElement = isCurrentPage
 
-                    DetailImageItem(
-                        image = images[page],
-                        sharedTransitionScope = this@with,
-                        animatedVisibilityScope = animatedVisibilityScope,
-                        isSharedElement = isSharedElement,
-                        isVisible = isVisible,
-                        onBack = onBack,
-                        onScaleChanged = { scale ->
-                            pageScales[page] = scale
-                        },
-                        onOffsetYChanged = { offset ->
-                            pageOffsetsY[page] = offset
-                        },
-                        onSwipeUp = {
-                            showBottomSheet = true
-                        }
-                    )
+                        DetailImageItem(
+                            image = pageImage,
+                            sharedTransitionScope = this@with,
+                            animatedVisibilityScope = animatedVisibilityScope,
+                            isSharedElement = isSharedElement,
+                            isCurrentPage = isCurrentPage,
+                            isVisible = isVisible,
+                            showTopBar = showTopBar,
+                            onBack = onBack,
+                            onToggleUi = { isUiVisible = !isUiVisible },
+                            onScaleChanged = { scale ->
+                                pageScales[page] = scale
+                            },
+                            onOffsetYChanged = { offset ->
+                                pageOffsetsY[page] = offset
+                            },
+                            onSwipeUp = {
+                                showBottomSheet = true
+                            }
+                        )
+                    }
                 }
 
                 if (showBottomSheet) {
-                    MetadataBottomSheet(
-                        image = images[pagerState.currentPage],
-                        repository = repository,
-                        isMetadataLoading = isMetadataLoading,
-                        onDismiss = { showBottomSheet = false }
-                    )
+                    val activeImage = images.getOrNull(pagerState.currentPage)
+                    if (activeImage != null) {
+                        MetadataBottomSheet(
+                            image = activeImage,
+                            repository = repository,
+                            isMetadataLoading = isMetadataLoading,
+                            onDismiss = { showBottomSheet = false }
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+private fun clampZoomOffsets(
+    scaleVal: Float,
+    rawOffsetX: Float,
+    rawOffsetY: Float,
+    viewportW: Float,
+    viewportH: Float,
+    aspectRatio: Float
+): Offset {
+    if (viewportW <= 0f || viewportH <= 0f || scaleVal <= 1.001f) {
+        return Offset.Zero
+    }
+    val effectiveAspect = if (aspectRatio > 0f) aspectRatio else (viewportW / viewportH)
+    val viewportAspect = viewportW / viewportH
+    val displayedW: Float
+    val displayedH: Float
+    if (viewportAspect > effectiveAspect) {
+        displayedH = viewportH
+        displayedW = viewportH * effectiveAspect
+    } else {
+        displayedW = viewportW
+        displayedH = viewportW / effectiveAspect
+    }
+    val scaledW = displayedW * scaleVal
+    val scaledH = displayedH * scaleVal
+    val maxOffsetX = ((scaledW - viewportW) / 2f).coerceAtLeast(0f)
+    val maxOffsetY = ((scaledH - viewportH) / 2f).coerceAtLeast(0f)
+    return Offset(
+        x = rawOffsetX.coerceIn(-maxOffsetX, maxOffsetX),
+        y = rawOffsetY.coerceIn(-maxOffsetY, maxOffsetY)
+    )
 }
 
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -223,8 +280,11 @@ private fun DetailImageItem(
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     isSharedElement: Boolean,
+    isCurrentPage: Boolean,
     isVisible: Boolean,
+    showTopBar: Boolean,
     onBack: () -> Unit,
+    onToggleUi: () -> Unit,
     onScaleChanged: (Float) -> Unit,
     onOffsetYChanged: (Float) -> Unit,
     onSwipeUp: () -> Unit
@@ -248,15 +308,24 @@ private fun DetailImageItem(
     val offsetY = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
 
+    var loadedAspectRatio by remember(image.uri, image.width, image.height) {
+        mutableFloatStateOf(if (image.width > 0 && image.height > 0) image.aspectRatio else 0f)
+    }
+
     var videoActive by remember { mutableStateOf(false) }
     var isPlaying by remember { mutableStateOf(false) }
     var currentTime by remember { mutableLongStateOf(0L) }
 
-    LaunchedEffect(isSharedElement) {
-        if (!isSharedElement) {
+    LaunchedEffect(isCurrentPage) {
+        if (!isCurrentPage) {
             videoActive = false
             isPlaying = false
             currentTime = 0L
+            if (scale.value != 1f || offsetX.value != 0f || offsetY.value != 0f) {
+                scale.snapTo(1f)
+                offsetX.snapTo(0f)
+                offsetY.snapTo(0f)
+            }
         }
     }
 
@@ -296,7 +365,164 @@ private fun DetailImageItem(
 
     with(sharedTransitionScope) {
         Box(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(image.id) {
+                    awaitEachGesture {
+                        var isSwipingVertical = false
+                        var isSwipingHorizontal = false
+                        var isZooming = false
+                        var totalPan = Offset.Zero
+                        var accumulatedSwipeY = 0f
+                        val touchSlop = viewConfiguration.touchSlop
+
+                        awaitFirstDown(requireUnconsumed = false)
+                        do {
+                            val event = awaitPointerEvent()
+                            val pressedCount = event.changes.count { it.pressed }
+                            val zoomChange = event.calculateZoom()
+                            val panChange = event.calculatePan()
+                            val centroid = event.calculateCentroid()
+
+                            val currentScale = scale.value
+
+                            if (pressedCount > 1 || currentScale > 1.01f || zoomChange != 1f || isZooming) {
+                                isZooming = true
+
+                                val newScale = (currentScale * zoomChange).coerceIn(1f, 6f)
+                                val actualZoomChange = if (currentScale > 0f) newScale / currentScale else 1f
+
+                                var zoomOffsetX = 0f
+                                var zoomOffsetY = 0f
+
+                                if (centroid != Offset.Unspecified) {
+                                    val center = Offset(size.width / 2f, size.height / 2f)
+                                    val centroidFromCenter = centroid - center
+                                    zoomOffsetX = (centroidFromCenter.x - offsetX.value) * (1f - actualZoomChange)
+                                    zoomOffsetY = (centroidFromCenter.y - offsetY.value) * (1f - actualZoomChange)
+                                }
+
+                                val rawTargetX = offsetX.value + zoomOffsetX + panChange.x
+                                val rawTargetY = offsetY.value + zoomOffsetY + panChange.y
+                                val clamped = clampZoomOffsets(
+                                    scaleVal = newScale,
+                                    rawOffsetX = rawTargetX,
+                                    rawOffsetY = rawTargetY,
+                                    viewportW = size.width.toFloat(),
+                                    viewportH = size.height.toFloat(),
+                                    aspectRatio = loadedAspectRatio
+                                )
+
+                                event.changes.forEach { change ->
+                                    if (change.positionChanged()) {
+                                        change.consume()
+                                    }
+                                }
+
+                                scope.launch {
+                                    scale.snapTo(newScale)
+                                    offsetX.snapTo(clamped.x)
+                                    offsetY.snapTo(clamped.y)
+                                }
+                            } else if (!isSwipingHorizontal) {
+                                totalPan += panChange
+                                if (!isSwipingVertical) {
+                                    if (abs(totalPan.x) > touchSlop && abs(totalPan.x) > abs(totalPan.y)) {
+                                        isSwipingHorizontal = true
+                                    } else if (abs(totalPan.y) > touchSlop && abs(totalPan.y) > abs(totalPan.x)) {
+                                        isSwipingVertical = true
+                                    }
+                                }
+
+                                if (isSwipingVertical) {
+                                    event.changes.forEach { change ->
+                                        if (change.positionChanged()) {
+                                            change.consume()
+                                        }
+                                    }
+                                    accumulatedSwipeY += panChange.y
+                                    scope.launch {
+                                        offsetY.snapTo((offsetY.value + panChange.y).coerceAtLeast(0f))
+                                    }
+                                }
+                            }
+                        } while (event.changes.any { it.pressed })
+
+                        if (isZooming) {
+                            if (scale.value <= 1.03f) {
+                                scope.launch {
+                                    launch { scale.animateTo(1f) }
+                                    launch { offsetX.animateTo(0f) }
+                                    launch { offsetY.animateTo(0f) }
+                                }
+                            } else {
+                                val clamped = clampZoomOffsets(
+                                    scaleVal = scale.value,
+                                    rawOffsetX = offsetX.value,
+                                    rawOffsetY = offsetY.value,
+                                    viewportW = size.width.toFloat(),
+                                    viewportH = size.height.toFloat(),
+                                    aspectRatio = loadedAspectRatio
+                                )
+                                scope.launch {
+                                    launch { offsetX.animateTo(clamped.x) }
+                                    launch { offsetY.animateTo(clamped.y) }
+                                }
+                            }
+                        } else if (scale.value <= 1.01f) {
+                            if (offsetY.value > 200f) {
+                                safeOnBack()
+                            } else if (accumulatedSwipeY < -120f) {
+                                onSwipeUp()
+                                scope.launch {
+                                    offsetY.animateTo(0f)
+                                }
+                            } else if (offsetY.value != 0f || offsetX.value != 0f) {
+                                scope.launch {
+                                    launch { scale.animateTo(1f) }
+                                    launch { offsetY.animateTo(0f) }
+                                    launch { offsetX.animateTo(0f) }
+                                }
+                            }
+                        }
+                    }
+                }
+                .pointerInput(image.id) {
+                    detectTapGestures(
+                        onTap = {
+                            if (isVisible) {
+                                onToggleUi()
+                            }
+                        },
+                        onDoubleTap = { tapOffset ->
+                            scope.launch {
+                                if (scale.value > 1.03f) {
+                                    launch { scale.animateTo(1f) }
+                                    launch { offsetX.animateTo(0f) }
+                                    launch { offsetY.animateTo(0f) }
+                                } else {
+                                    val targetScale = 3f
+                                    val center = Offset(size.width / 2f, size.height / 2f)
+                                    val tapFromCenter = tapOffset - center
+                                    val rawTargetX = (tapFromCenter.x - offsetX.value) * (1f - targetScale)
+                                    val rawTargetY = (tapFromCenter.y - offsetY.value) * (1f - targetScale)
+                                    val clamped = clampZoomOffsets(
+                                        scaleVal = targetScale,
+                                        rawOffsetX = rawTargetX,
+                                        rawOffsetY = rawTargetY,
+                                        viewportW = size.width.toFloat(),
+                                        viewportH = size.height.toFloat(),
+                                        aspectRatio = loadedAspectRatio
+                                    )
+
+                                    launch { scale.animateTo(targetScale) }
+                                    launch { offsetX.animateTo(clamped.x) }
+                                    launch { offsetY.animateTo(clamped.y) }
+                                }
+                            }
+                        }
+                    )
+                },
             contentAlignment = Alignment.Center
         ) {
             Box(
@@ -307,124 +533,18 @@ private fun DetailImageItem(
                         scaleY = scale.value,
                         translationX = offsetX.value,
                         translationY = offsetY.value
-                    )
-                    .pointerInput(Unit) {
-                        awaitEachGesture {
-                            var isSwipingVertical = false
-                            var isZooming = false
-
-                            awaitFirstDown(requireUnconsumed = false)
-                            var accumulatedSwipeY = 0f
-                            do {
-                                val event = awaitPointerEvent()
-                                val zoomChange = event.calculateZoom()
-                                val panChange = event.calculatePan()
-                                val centroid = event.calculateCentroid()
-
-                                val currentScale = scale.value
-
-                                if (currentScale > 1.01f || zoomChange != 1f || isZooming) {
-                                    isZooming = true
-
-                                    val newScale = (currentScale * zoomChange).coerceIn(1f, Float.MAX_VALUE)
-                                    val actualZoomChange = if (currentScale > 0f) newScale / currentScale else 1f
-
-                                    var zoomOffsetX = 0f
-                                    var zoomOffsetY = 0f
-
-                                    if (centroid != Offset.Unspecified) {
-                                        val center = Offset(size.width / 2f, size.height / 2f)
-                                        val centroidFromCenter = centroid - center
-                                        zoomOffsetX = (centroidFromCenter.x - offsetX.value) * (1f - actualZoomChange)
-                                        zoomOffsetY = (centroidFromCenter.y - offsetY.value) * (1f - actualZoomChange)
-                                    }
-                                    val panSensitivity = 1.2f * currentScale
-
-                                    val targetOffsetX = offsetX.value + zoomOffsetX + ( panChange.x * panSensitivity )
-                                    val targetOffsetY = offsetY.value + zoomOffsetY + ( panChange.y * panSensitivity )
-
-                                    scope.launch {
-                                        scale.snapTo(newScale)
-                                        offsetX.snapTo(targetOffsetX)
-                                        offsetY.snapTo(targetOffsetY)
-                                    }
-                                } else {
-                                    if (!isSwipingVertical && abs(panChange.y) > abs(panChange.x) && abs(panChange.y) > 2f) {
-                                        isSwipingVertical = true
-                                    }
-
-                                    if (isSwipingVertical) {
-                                        event.changes.forEach { it.consume() }
-                                        accumulatedSwipeY += panChange.y
-                                        scope.launch {
-                                            offsetY.snapTo((offsetY.value + panChange.y).coerceAtLeast(0f))
-                                        }
-                                    }
-                                }
-                            } while (event.changes.any { it.pressed })
-
-                            if (scale.value <= 1.01f) {
-                                if (offsetY.value > 200f) {
-                                    safeOnBack()
-                                } else if (accumulatedSwipeY < -150f) {
-                                    onSwipeUp()
-                                } else {
-                                    scope.launch {
-                                        scale.animateTo(1f)
-                                        offsetY.animateTo(0f)
-                                        offsetX.animateTo(0f)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    .pointerInput(Unit) {
-                        detectTapGestures(
-                            onTap = {
-                                if (isVisible) {
-                                    if (image.type == MediaType.VIDEO || image.isMotionPhoto) {
-                                        if (!videoActive) {
-                                            videoActive = true
-                                            isPlaying = true
-                                        } else {
-                                            isPlaying = !isPlaying
-                                        }
-                                    } else if (scale.value <= 1.01f) {
-                                        safeOnBack()
-                                    }
-                                }
-                            },
-                            onDoubleTap = { tapOffset ->
-                                scope.launch {
-                                    if (scale.value > 1.01f) {
-                                        launch { scale.animateTo(1f) }
-                                        launch { offsetX.animateTo(0f) }
-                                        launch { offsetY.animateTo(0f) }
-                                    } else {
-                                        val targetScale = 3f
-                                        val center = Offset(size.width / 2f, size.height / 2f)
-                                        val tapFromCenter = tapOffset - center
-                                        val targetOffsetX = (tapFromCenter.x - offsetX.value) * (1f - targetScale)
-                                        val targetOffsetY = (tapFromCenter.y - offsetY.value) * (1f - targetScale)
-
-                                        launch { scale.animateTo(targetScale) }
-                                        launch { offsetX.animateTo(targetOffsetX) }
-                                        launch { offsetY.animateTo(targetOffsetY) }
-                                    }
-                                }
-                            }
-                        )
-                    },
+                    ),
                 contentAlignment = Alignment.Center
             ) {
+                val effectiveAspect = if (image.width > 0 && image.height > 0) image.aspectRatio else loadedAspectRatio
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .then(
-                            if (showAspectRatio && image.width > 0 && image.height > 0) {
+                            if (showAspectRatio && effectiveAspect > 0f) {
                                 Modifier
                                     .wrapContentSize(Alignment.Center)
-                                    .aspectRatio(image.aspectRatio)
+                                    .aspectRatio(effectiveAspect)
                             } else {
                                 Modifier
                             }
@@ -434,6 +554,14 @@ private fun DetailImageItem(
                     AsyncImage(
                         model = model,
                         contentDescription = image.name,
+                        onState = { state ->
+                            if (state is AsyncImagePainter.State.Success) {
+                                val intrinsic = state.painter.intrinsicSize
+                                if (intrinsic.width > 0f && intrinsic.height > 0f) {
+                                    loadedAspectRatio = intrinsic.width / intrinsic.height
+                                }
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxSize()
                             .then(
@@ -447,7 +575,7 @@ private fun DetailImageItem(
                                     )
                                 } else Modifier
                             ),
-                        contentScale = if (showAspectRatio && image.width > 0 && image.height > 0) ContentScale.Crop else ContentScale.Fit
+                        contentScale = if (showAspectRatio && effectiveAspect > 0f) ContentScale.Crop else ContentScale.Fit
                     )
 
                     AnimatedVisibility(
@@ -469,6 +597,10 @@ private fun DetailImageItem(
 
             // Píldoras de UI - Posición fija por encima del objeto con zoom
             val isTransitionRunning = animatedVisibilityScope.transition.currentState != animatedVisibilityScope.transition.targetState
+            val pillTopPadding by animateDpAsState(
+                targetValue = if (showTopBar) 104.dp else 44.dp,
+                label = "pillTopPadding"
+            )
 
             AnimatedVisibility(
                 visible = (image.type == MediaType.VIDEO || image.isMotionPhoto) && isVisible && !isTransitionRunning,
@@ -476,20 +608,29 @@ private fun DetailImageItem(
                 exit = fadeOut(tween(300)),
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(top = 40.dp, start = 16.dp)
+                    .padding(top = pillTopPadding, start = 16.dp)
             ) {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Row(
                         modifier = Modifier
-                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Color.Black.copy(alpha = 0.55f))
+                            .clickable {
+                                if (!videoActive) {
+                                    videoActive = true
+                                    isPlaying = true
+                                } else {
+                                    isPlaying = !isPlaying
+                                }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = null,
+                            contentDescription = if (isPlaying) "Pausar" else "Reproducir",
                             tint = Color.White,
                             modifier = Modifier.size(20.dp)
                         )
@@ -506,13 +647,18 @@ private fun DetailImageItem(
                     if (image.isMotionPhoto && !isPlaying) {
                         Box(
                             modifier = Modifier
-                                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color.Black.copy(alpha = 0.55f))
+                                .clickable {
+                                    videoActive = true
+                                    isPlaying = true
+                                }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Image,
-                                contentDescription = null,
+                                contentDescription = "Motion Photo",
                                 tint = Color.White,
                                 modifier = Modifier.size(20.dp)
                             )

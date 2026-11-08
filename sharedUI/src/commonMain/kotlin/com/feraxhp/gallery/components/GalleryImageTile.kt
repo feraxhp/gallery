@@ -85,6 +85,7 @@ fun GalleryImageTile(
     onToggleSelection: (GalleryImage) -> Unit,
     onPositioned: (androidx.compose.ui.geometry.Rect) -> Unit,
     onBitmapLoaded: (ImageBitmap) -> Unit,
+    onDisposeTile: (Long) -> Unit = {},
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     modifier: Modifier = Modifier,
@@ -98,6 +99,12 @@ fun GalleryImageTile(
         rememberVideoModel(image.uri, image.duration)
     } else {
         image.uri
+    }
+
+    androidx.compose.runtime.DisposableEffect(image.id) {
+        onDispose {
+            onDisposeTile(image.id)
+        }
     }
 
     with(sharedTransitionScope) {

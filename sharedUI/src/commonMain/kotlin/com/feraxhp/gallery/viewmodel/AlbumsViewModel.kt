@@ -22,9 +22,18 @@ class AlbumsViewModel(private val repository: ImageRepository) : ViewModel() {
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
+    var savedScrollIndex: Int = 0
+    var savedScrollOffset: Int = 0
+
+    init {
+        loadAlbums()
+    }
+
     fun loadAlbums() {
         viewModelScope.launch {
-            _isLoading.value = true
+            if (_albums.value.isEmpty()) {
+                _isLoading.value = true
+            }
             try {
                 _albums.value = repository.getAlbums()
             } catch (e: Exception) {

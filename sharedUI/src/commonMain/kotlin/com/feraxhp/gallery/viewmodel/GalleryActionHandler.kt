@@ -13,6 +13,9 @@ interface GalleryActionHandler {
     fun loadFullMetadata(image: GalleryImage)
     fun hideImage(imageId: Long)
     fun restoreImage(imageId: Long)
+    fun restoreSelection(imageIds: Set<Long>)
+    fun upsertImage(image: GalleryImage)
     fun clearSelection()
     fun clearDeletedState()
+    fun loadImages(force: Boolean = false)
 }

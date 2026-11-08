@@ -14,134 +14,119 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 package com.feraxhp.gallery
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.DriveFileMove
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.PhotoAlbum
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FloatingToolbarDefaults
-import androidx.compose.material3.HorizontalFloatingToolbar
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.metadata
 import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import androidx.navigation3.ui.NavDisplay
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.media3.common.util.Log
-import androidx.media3.common.util.UnstableApi
-import co.touchlab.kermit.Logger
-import com.feraxhp.gallery.components.NavigationItem
-import com.feraxhp.gallery.model.Album
 import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.navigation.Destination
 import com.feraxhp.gallery.repository.ImageRepository
-import com.feraxhp.gallery.screens.AlbumsScreen
 import com.feraxhp.gallery.screens.AlbumGalleryScreen
 import com.feraxhp.gallery.screens.DetailScreen
 import com.feraxhp.gallery.screens.EditScreen
-import com.feraxhp.gallery.screens.GalleryScreen
 import com.feraxhp.gallery.screens.HomeScreen
 import com.feraxhp.gallery.screens.MoveToAlbumScreen
 import com.feraxhp.gallery.screens.PermissionsScreen
 import com.feraxhp.gallery.util.SetSystemBarsColor
-import com.feraxhp.gallery.viewmodel.GalleryViewModel
 import com.feraxhp.gallery.viewmodel.GalleryActionHandler
+import com.feraxhp.gallery.viewmodel.GalleryViewModel
 import com.feraxhp.ktheme.DynamicTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import kotlin.time.Duration.Companion.milliseconds
+
+private val appStateJson = Json {
+    ignoreUnknownKeys = true
+    encodeDefaults = true
+}
+
+private val backStackSaver = Saver<List<Destination>, String>(
+    save = { list ->
+        runCatching { appStateJson.encodeToString(list) }.getOrDefault("")
+    },
+    restore = { str ->
+        if (str.isBlank()) {
+            listOf(Destination.Home)
+        } else {
+            runCatching { appStateJson.decodeFromString<List<Destination>>(str) }
+                .getOrNull()
+                ?.takeIf { it.isNotEmpty() }
+                ?: listOf(Destination.Home)
+        }
+    }
+)
+
+private val nullableGalleryImageSaver = Saver<GalleryImage?, String>(
+    save = { img ->
+        img?.let { runCatching { appStateJson.encodeToString(it) }.getOrNull() } ?: ""
+    },
+    restore = { str ->
+        if (str.isBlank()) null else runCatching { appStateJson.decodeFromString<GalleryImage>(str) }.getOrNull()
+    }
+)
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @OptIn(
     ExperimentalMaterial3Api::class,
-    ExperimentalMaterial3Api::class,
-    ExperimentalSharedTransitionApi::class, ExperimentalMaterial3ExpressiveApi::class
+    ExperimentalSharedTransitionApi::class,
+    ExperimentalMaterial3ExpressiveApi::class
 )
 @Composable
 fun App(
@@ -154,7 +139,7 @@ fun App(
     onRequestWritePermission: () -> Unit
 ) {
     val isSystemDark = isSystemInDarkTheme()
-    var backStack by remember {
+    var backStack by rememberSaveable(stateSaver = backStackSaver) {
         mutableStateOf(
             listOf<Destination>(
                 if (hasReadPermission && hasWritePermission) Destination.Home else Destination.Permissions
@@ -164,7 +149,6 @@ fun App(
 
     LaunchedEffect(initialMediaUri, hasReadPermission, hasWritePermission) {
         if (initialMediaUri != null && hasReadPermission && hasWritePermission) {
-            // Navegamos al detalle externo instantáneamente
             backStack = listOf(Destination.Home, Destination.ExternalDetail(initialMediaUri))
             onUriConsumed()
         }
@@ -173,7 +157,22 @@ fun App(
     val currentReadPermission by rememberUpdatedState(hasReadPermission)
     val currentWritePermission by rememberUpdatedState(hasWritePermission)
 
-    var activeActionHandler by remember { mutableStateOf<GalleryActionHandler?>(null) }
+    val homeViewModel: GalleryViewModel = viewModel(key = "home_gallery") { GalleryViewModel(repository) }
+    val activeAlbumDest = backStack.lastOrNull { it is Destination.AlbumGallery } as? Destination.AlbumGallery
+    val albumViewModel: GalleryViewModel? = if (activeAlbumDest != null) {
+        viewModel(key = "album_${activeAlbumDest.albumId}") { GalleryViewModel(repository, activeAlbumDest.albumId) }
+    } else {
+        null
+    }
+    val activeActionHandler: GalleryActionHandler = albumViewModel ?: homeViewModel
+
+    var savedSelectedIds by rememberSaveable { mutableStateOf(LongArray(0)) }
+
+    LaunchedEffect(activeActionHandler) {
+        if (savedSelectedIds.isNotEmpty() && activeActionHandler.selectedImageIds.value.isEmpty()) {
+            activeActionHandler.restoreSelection(savedSelectedIds.toSet())
+        }
+    }
 
     LaunchedEffect(hasReadPermission, hasWritePermission) {
         if (hasReadPermission && hasWritePermission && backStack.lastOrNull() == Destination.Permissions) {
@@ -182,14 +181,12 @@ fun App(
     }
 
     val currentDestination = backStack.lastOrNull()
-    var isDetailActive by remember { mutableStateOf(false) }
+    var isDetailActive by rememberSaveable { mutableStateOf(false) }
     var isProcessingAction by remember { mutableStateOf(false) }
     var actionProgress by remember { mutableStateOf(0f) }
     var actionProgressText by remember { mutableStateOf("") }
-    var currentImageInDetail by remember {
-        mutableStateOf<com.feraxhp.gallery.model.GalleryImage?>(
-            null
-        )
+    var currentImageInDetail by rememberSaveable(stateSaver = nullableGalleryImageSaver) {
+        mutableStateOf<GalleryImage?>(null)
     }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -197,8 +194,13 @@ fun App(
     var activePendingDeleteData by remember { mutableStateOf<Pair<List<GalleryImage>, suspend () -> Unit>?>(null) }
     val scope = rememberCoroutineScope()
 
-    val selectedIds = activeActionHandler?.selectedImageIds?.collectAsState()?.value ?: emptySet()
-    val allImages = activeActionHandler?.images?.collectAsState()?.value ?: emptyList()
+    val selectedIds by activeActionHandler.selectedImageIds.collectAsState()
+    val allImages by activeActionHandler.images.collectAsState()
+
+    LaunchedEffect(selectedIds) {
+        savedSelectedIds = selectedIds.toLongArray()
+    }
+
     val selectedImages = remember(selectedIds, allImages) {
         allImages.filter { it.id in selectedIds }
     }
@@ -219,7 +221,6 @@ fun App(
                     val currentBackstack = backStack
                     showDeleteConfirmation = false
                     
-                    // Si ya había un borrado pendiente sin confirmar/cancelar, concretarlo en disco inmediatamente
                     val prevPending = activePendingDeleteData
                     if (prevPending != null) {
                         scope.launch {
@@ -234,8 +235,13 @@ fun App(
                     pendingDeleteJob?.cancel()
 
                     val isFromDetail = isDetailActive
-                    val vmImages = activeActionHandler?.images?.value ?: emptyList()
-                    val imagesInDetail = if (vmImages.any { it.id == currentImageInDetail?.id }) vmImages else ((currentDestination as? Destination.Detail)?.allImages ?: emptyList())
+                    val vmImages = activeActionHandler.images.value
+                    val detailDest = currentDestination as? Destination.Detail
+                    val imagesInDetail = if (detailDest?.isExternal == true) {
+                        listOfNotNull(currentImageInDetail ?: detailDest.image)
+                    } else {
+                        vmImages
+                    }
 
                     var shouldExitDetail = false
                     var targetImageAfterDelete: GalleryImage? = null
@@ -269,8 +275,7 @@ fun App(
                     pendingDeleteJob = scope.launch {
                         val handler = activeActionHandler
                         
-                        // Activamos la animación de shatter para todas
-                        handler?.markAsDeleted(imagesToDelete.map { it.id }.toSet(), fromDetail = isFromDetail)
+                        handler.markAsDeleted(imagesToDelete.map { it.id }.toSet(), fromDetail = isFromDetail)
                         
                         if (isFromDetail && !shouldExitDetail && targetImageAfterDelete != null) {
                             currentImageInDetail = targetImageAfterDelete
@@ -280,9 +285,9 @@ fun App(
                             delay(deleteDelay)
                         }
                         
-                        imagesToDelete.forEach { handler?.hideImage(it.id) }
-                        handler?.clearDeletedState()
-                        handler?.clearSelection()
+                        imagesToDelete.forEach { handler.hideImage(it.id) }
+                        handler.clearDeletedState()
+                        handler.clearSelection()
                         
                         val snackbarMessage = if (imagesToDelete.size == 1) "Imagen eliminada" else "${imagesToDelete.size} imágenes eliminadas"
                         val result = snackbarHostState.showSnackbar(
@@ -292,9 +297,8 @@ fun App(
                         )
                         
                         if (result == SnackbarResult.ActionPerformed) {
-                            // Si se pulsa Undo, volvemos a mostrarlas
-                            imagesToDelete.forEach { handler?.restoreImage(it.id) }
-                            handler?.clearDeletedState()
+                            imagesToDelete.forEach { handler.restoreImage(it.id) }
+                            handler.clearDeletedState()
                             if (isFromDetail) {
                                 if (shouldExitDetail) {
                                     backStack = currentBackstack
@@ -309,7 +313,6 @@ fun App(
                             }
                             activePendingDeleteData = null
                         } else {
-                            // Si no se pulsa, borramos definitivamente
                             withContext(NonCancellable) {
                                 commitAction()
                             }
@@ -366,7 +369,7 @@ fun App(
                     },
                     entryProvider = { key: Destination ->
                         when (key) {
-                            Destination.Permissions -> NavEntry(key) {
+                            Destination.Permissions -> NavEntry(key, contentKey = key.contentKey) {
                                 PermissionsScreen(
                                     hasReadPermission = currentReadPermission,
                                     hasWritePermission = currentWritePermission,
@@ -379,7 +382,7 @@ fun App(
                                 )
                             }
 
-                            is Destination.ExternalDetail -> NavEntry(key) {
+                            is Destination.ExternalDetail -> NavEntry(key, contentKey = key.contentKey) {
                                 Box(
                                     modifier = Modifier.fillMaxSize().background(Color.Black),
                                     contentAlignment = Alignment.Center
@@ -389,33 +392,35 @@ fun App(
                                 LaunchedEffect(key.uri) {
                                     val image = repository.getImageByUri(key.uri)
                                     if (image != null) {
-                                        backStack = backStack.dropLast(1) + Destination.Detail(image, listOf(image))
+                                        currentImageInDetail = image
+                                        backStack = backStack.dropLast(1) + Destination.Detail(image, isExternal = true)
                                     } else {
                                         backStack = listOf(Destination.Home)
                                     }
                                 }
                             }
 
-                            Destination.Home -> NavEntry(key) {
+                            Destination.Home -> NavEntry(key, contentKey = key.contentKey) {
                                 LaunchedEffect(Unit) { isDetailActive = false }
                                 val animatedVisibilityScope = LocalNavAnimatedContentScope.current
-                                val viewModel: GalleryViewModel = viewModel { GalleryViewModel(repository) }
-                                LaunchedEffect(viewModel) { activeActionHandler = viewModel }
-                                
+
                                 HomeScreen(
                                     repository = repository,
-                                    galleryViewModel = viewModel,
+                                    galleryViewModel = homeViewModel,
                                     sharedTransitionScope = this@SharedTransitionLayout,
                                     animatedVisibilityScope = animatedVisibilityScope,
-                                    onNavigateToDetail = { image, images ->
+                                    onNavigateToDetail = { image, _ ->
                                         currentImageInDetail = image
-                                        backStack = backStack + Destination.Detail(image, images)
+                                        backStack = backStack + Destination.Detail(image, isExternal = false)
                                     },
                                     onNavigateToAlbumGallery = { album ->
                                         backStack = backStack + Destination.AlbumGallery(album.id, album.name)
                                     },
-                                    onNavigateToMoveToAlbum = { images, all ->
-                                        backStack = backStack + Destination.MoveToAlbum(images, all)
+                                    onNavigateToMoveToAlbum = { images, _ ->
+                                        backStack = backStack + Destination.MoveToAlbum(
+                                            imageIds = images.map { it.id },
+                                            fallbackImage = images.firstOrNull()
+                                        )
                                     },
                                     onShareImages = { images ->
                                         repository.shareImages(images)
@@ -426,11 +431,10 @@ fun App(
                                 )
                             }
 
-                            is Destination.AlbumGallery -> NavEntry(key) {
+                            is Destination.AlbumGallery -> NavEntry(key, contentKey = key.contentKey) {
                                 LaunchedEffect(Unit) { isDetailActive = false }
                                 val animatedVisibilityScope = LocalNavAnimatedContentScope.current
-                                val viewModel: GalleryViewModel = viewModel(key = key.albumId) { GalleryViewModel(repository, key.albumId) }
-                                LaunchedEffect(viewModel) { activeActionHandler = viewModel }
+                                val viewModel: GalleryViewModel = viewModel(key = "album_${key.albumId}") { GalleryViewModel(repository, key.albumId) }
                                 AlbumGalleryScreen(
                                     viewModel = viewModel,
                                     albumId = key.albumId,
@@ -440,17 +444,20 @@ fun App(
                                             backStack = backStack.dropLast(1)
                                         }
                                     },
-                                    onImageClick = { image, allImages ->
+                                    onImageClick = { image, _ ->
                                         currentImageInDetail = image
-                                        backStack = backStack + Destination.Detail(image, allImages)
+                                        backStack = backStack + Destination.Detail(image, isExternal = false)
                                     },
-                                    onNavigateToMoveToAlbum = { images, all ->
-                                        backStack = backStack + Destination.MoveToAlbum(images, all)
+                                    onNavigateToMoveToAlbum = { images, _ ->
+                                        backStack = backStack + Destination.MoveToAlbum(
+                                            imageIds = images.map { it.id },
+                                            fallbackImage = images.firstOrNull()
+                                        )
                                     },
                                     onShareImages = { images ->
                                         repository.shareImages(images)
                                     },
-                                    onDeleteImages = { images ->
+                                    onDeleteImages = { _ ->
                                         showDeleteConfirmation = true
                                     },
                                     sharedTransitionScope = this@SharedTransitionLayout,
@@ -460,6 +467,7 @@ fun App(
 
                             is Destination.Detail -> NavEntry(
                                 key,
+                                contentKey = key.contentKey,
                                 metadata = metadata {
                                     put(NavDisplay.TransitionKey) {
                                         fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
@@ -475,23 +483,34 @@ fun App(
                                     isDetailActive = isTargetVisible
                                 }
 
-                                val vmImages by activeActionHandler?.images?.collectAsState() ?: remember { mutableStateOf(emptyList<GalleryImage>()) }
-                                val isExternal = remember(key.image) {
-                                    key.allImages.size == 1 && activeActionHandler?.images?.value?.none { it.id == key.image.id } == true
+                                val vmImages by activeActionHandler.images.collectAsState()
+                                val activeDetailImage = currentImageInDetail ?: key.image
+                                val imagesToShow = remember(key.isExternal, key.image, activeDetailImage, vmImages) {
+                                    if (key.isExternal) {
+                                        listOf(activeDetailImage)
+                                    } else if (vmImages.isNotEmpty()) {
+                                        vmImages
+                                    } else {
+                                        listOf(activeDetailImage)
+                                    }
                                 }
-                                val imagesToShow = if (isExternal) key.allImages else vmImages
-                                val loadingIds by activeActionHandler?.loadingMetadataIds?.collectAsState() ?: remember { mutableStateOf(emptySet<Long>()) }
+                                val loadingIds by activeActionHandler.loadingMetadataIds.collectAsState()
+                                val initialIdx = remember(imagesToShow, activeDetailImage.id, key.image.id) {
+                                    imagesToShow.indexOfFirst { it.id == activeDetailImage.id }
+                                        .takeIf { it >= 0 }
+                                        ?: imagesToShow.indexOfFirst { it.id == key.image.id }.coerceAtLeast(0)
+                                }
 
                                 DetailScreen(
                                     images = imagesToShow,
-                                    initialIndex = imagesToShow.indexOfFirst { it.id == key.image.id }.coerceAtLeast(0),
+                                    initialIndex = initialIdx,
                                     sharedTransitionScope = this@SharedTransitionLayout,
                                     animatedVisibilityScope = animatedVisibilityScope,
                                     repository = repository,
                                     onImageChange = { currentImageInDetail = it },
-                                    onLoadMetadata = { activeActionHandler?.loadFullMetadata(it) },
-                                    isMetadataLoading = currentImageInDetail?.id in loadingIds,
-                                    selectedImageId = currentImageInDetail?.id,
+                                    onLoadMetadata = { activeActionHandler.loadFullMetadata(it) },
+                                    isMetadataLoading = activeDetailImage.id in loadingIds,
+                                    selectedImageId = activeDetailImage.id,
                                     topPadding = 0.dp,
                                     onBack = {
                                         if (backStack.size > 1) {
@@ -499,17 +518,19 @@ fun App(
                                         }
                                     },
                                     onEdit = {
-                                        currentImageInDetail?.let {
-                                            backStack = backStack + Destination.Edit(it.uri)
-                                        }
+                                        val img = currentImageInDetail ?: key.image
+                                        backStack = backStack + Destination.Edit(img.uri)
                                     },
                                     onShare = {
-                                        currentImageInDetail?.let { repository.shareImage(it) }
+                                        val img = currentImageInDetail ?: key.image
+                                        repository.shareImage(img)
                                     },
                                     onMoveToAlbum = {
-                                        currentImageInDetail?.let {
-                                            backStack = backStack + Destination.MoveToAlbum(listOf(it), imagesToShow)
-                                        }
+                                        val img = currentImageInDetail ?: key.image
+                                        backStack = backStack + Destination.MoveToAlbum(
+                                            imageIds = listOf(img.id),
+                                            fallbackImage = img
+                                        )
                                     },
                                     onDelete = {
                                         showDeleteConfirmation = true
@@ -517,16 +538,17 @@ fun App(
                                 )
                             }
 
-                            is Destination.Edit -> NavEntry(key) {
+                            is Destination.Edit -> NavEntry(key, contentKey = key.contentKey) {
                                 EditScreen(
                                     imageUri = key.uri,
                                     repository = repository,
                                     onImageSaved = { savedImage ->
                                         currentImageInDetail = savedImage
+                                        homeViewModel.upsertImage(savedImage)
+                                        albumViewModel?.upsertImage(savedImage)
                                         if (backStack.size > 1 && backStack[backStack.size - 2] is Destination.Detail) {
                                             val detailDest = backStack[backStack.size - 2] as Destination.Detail
-                                            val updatedList = listOf(savedImage) + detailDest.allImages.filter { it.id != savedImage.id }
-                                            backStack = backStack.dropLast(2) + Destination.Detail(savedImage, updatedList)
+                                            backStack = backStack.dropLast(2) + detailDest.copy(image = savedImage)
                                         } else if (backStack.size > 1) {
                                             backStack = backStack.dropLast(1)
                                         }
@@ -543,7 +565,7 @@ fun App(
                                 )
                             }
 
-                            is Destination.MoveToAlbum -> NavEntry(key) {
+                            is Destination.MoveToAlbum -> NavEntry(key, contentKey = key.contentKey) {
                                 MoveToAlbumScreen(
                                     repository = repository,
                                     isProcessing = isProcessingAction,
@@ -552,14 +574,17 @@ fun App(
                                     onAlbumSelected = { album ->
                                         scope.launch {
                                             isProcessingAction = true
-                                            val total = key.images.size
                                             val handler = activeActionHandler
-                                            val originalImagesState = key.images.map { it.id to it.albumId }
+                                            val vmImages = handler.images.value
+                                            val imagesToMove = vmImages.filter { it.id in key.imageIds }
+                                                .ifEmpty { listOfNotNull(key.fallbackImage) }
+                                            val total = imagesToMove.size.coerceAtLeast(1)
+                                            val originalImagesState = imagesToMove.map { it.id to it.albumId }
                                             
                                             val updatedImages = mutableListOf<GalleryImage>()
                                             val successfulMoves = mutableListOf<Pair<GalleryImage, GalleryImage?>>()
                                             
-                                            key.images.forEachIndexed { index, image ->
+                                            imagesToMove.forEachIndexed { index, image ->
                                                 actionProgress = (index + 1).toFloat() / total
                                                 actionProgressText = "${index + 1} de $total"
                                                 
@@ -571,20 +596,21 @@ fun App(
                                             val anySuccess = successfulMoves.any { it.second != null }
                                             
                                             if (anySuccess) {
-                                                val newAllImages = key.allImages.map { current ->
-                                                    updatedImages.find { it.id == current.id } ?: current
-                                                }
-                                                
-                                                // Actualizamos la entrada anterior en el backstack (el Detail si venía de ahí)
+                                                homeViewModel.loadImages(force = true)
+                                                albumViewModel?.loadImages(force = true)
+
                                                 if (backStack.size > 1 && backStack[backStack.size - 2] is Destination.Detail) {
                                                     val detailDest = backStack[backStack.size - 2] as Destination.Detail
-                                                    val newCurrentImage = updatedImages.find { it.id == detailDest.image.id } ?: detailDest.image
-                                                    backStack = backStack.dropLast(1).dropLast(1) + Destination.Detail(newCurrentImage, newAllImages)
+                                                    val newCurrentImage = updatedImages.find { it.id == (currentImageInDetail?.id ?: detailDest.image.id) }
+                                                        ?: updatedImages.firstOrNull()
+                                                        ?: detailDest.image
+                                                    currentImageInDetail = newCurrentImage
+                                                    backStack = backStack.dropLast(2) + detailDest.copy(image = newCurrentImage)
                                                 } else {
                                                     backStack = backStack.dropLast(1)
                                                 }
                                                 
-                                                handler?.clearSelection()
+                                                handler.clearSelection()
                                                 
                                                 isProcessingAction = false
                                                 
@@ -607,6 +633,8 @@ fun App(
                                                             repository.moveImage(movedImage, originalAlbumId)
                                                         }
                                                     }
+                                                    homeViewModel.loadImages(force = true)
+                                                    albumViewModel?.loadImages(force = true)
                                                     snackbarHostState.showSnackbar("Movimiento cancelado")
                                                 }
                                             } else {

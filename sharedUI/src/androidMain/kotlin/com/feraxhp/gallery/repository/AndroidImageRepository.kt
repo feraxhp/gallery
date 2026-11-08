@@ -407,33 +407,53 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
     }
 
     override fun shareImage(image: GalleryImage) {
+        val uri = Uri.parse(image.uri)
         val shareIntent = Intent().apply {
             action = Intent.ACTION_SEND
-            putExtra(Intent.EXTRA_STREAM, Uri.parse(image.uri))
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = android.content.ClipData.newRawUri("", uri)
             // Se usa application/octet-stream para que las apps receptoras lo traten como un archivo genérico
             // y no procesen la imagen/video (manteniendo así la metadata original).
             type = "application/octet-stream"
-            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        val chooser = Intent.createChooser(shareIntent, "Compartir con")
-        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val chooser = Intent.createChooser(shareIntent, "Compartir con").apply {
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            if (context !is android.app.Activity) {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        }
         context.startActivity(chooser)
     }
 
     override fun shareImages(images: List<GalleryImage>) {
         if (images.isEmpty()) return
         val uris = ArrayList<Uri>()
-        images.forEach { uris.add(Uri.parse(it.uri)) }
+        var clipDataObj: android.content.ClipData? = null
+        images.forEach { img ->
+            val u = Uri.parse(img.uri)
+            uris.add(u)
+            if (clipDataObj == null) {
+                clipDataObj = android.content.ClipData.newRawUri("", u)
+            } else {
+                clipDataObj?.addItem(android.content.ClipData.Item(u))
+            }
+        }
         
         val shareIntent = Intent().apply {
             action = Intent.ACTION_SEND_MULTIPLE
             putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            clipData = clipDataObj
             // Se usa application/octet-stream para que se envíen como archivos y se preserve la metadata.
             type = "application/octet-stream"
-            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        val chooser = Intent.createChooser(shareIntent, "Compartir ${images.size} elementos con")
-        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val chooser = Intent.createChooser(shareIntent, "Compartir ${images.size} elementos con").apply {
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            if (context !is android.app.Activity) {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        }
         context.startActivity(chooser)
     }
 

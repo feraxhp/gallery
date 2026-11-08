@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PhotoAlbum
@@ -17,6 +18,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,10 +47,30 @@ fun AlbumsScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
 
+    var savedScrollIndex by rememberSaveable { mutableIntStateOf(viewModel.savedScrollIndex) }
+    var savedScrollOffset by rememberSaveable { mutableIntStateOf(viewModel.savedScrollOffset) }
+
+    val gridState = rememberLazyGridState(
+        initialFirstVisibleItemIndex = savedScrollIndex,
+        initialFirstVisibleItemScrollOffset = savedScrollOffset
+    )
+
+    LaunchedEffect(gridState, albums.isNotEmpty()) {
+        if (albums.isNotEmpty()) {
+            snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
+                .collect { (index, offset) ->
+                    savedScrollIndex = index
+                    savedScrollOffset = offset
+                    viewModel.savedScrollIndex = index
+                    viewModel.savedScrollOffset = offset
+                }
+        }
+    }
+
     val pullToRefreshState = rememberPullToRefreshState()
 
     LaunchedEffect(animatedVisibilityScope.transition.targetState) {
-        if (animatedVisibilityScope.transition.targetState == EnterExitState.Visible) {
+        if (animatedVisibilityScope.transition.targetState == EnterExitState.Visible && albums.isEmpty()) {
             viewModel.loadAlbums()
         }
     }
@@ -92,6 +114,7 @@ fun AlbumsScreen(
             }
         ) {
             LazyVerticalGrid(
+                state = gridState,
                 columns = GridCells.Fixed(2),
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(

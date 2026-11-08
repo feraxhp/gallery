@@ -27,7 +27,7 @@ class GalleryViewModel(
 
     override val images: StateFlow<List<GalleryImage>> = combine(_images, _hiddenImageIds) { images, hiddenIds ->
         images.filter { it.id !in hiddenIds }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -40,13 +40,20 @@ class GalleryViewModel(
 
     val isSelectionMode: StateFlow<Boolean> = _selectedImageIds
         .map { it.isNotEmpty() }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private val _deletedImageIds = MutableStateFlow<Set<Long>>(emptySet())
     override val deletedImageIds: StateFlow<Set<Long>> = _deletedImageIds.asStateFlow()
 
     private val _isDeletedFromDetail = MutableStateFlow(false)
     override val isDeletedFromDetail: StateFlow<Boolean> = _isDeletedFromDetail.asStateFlow()
+
+    var savedScrollIndex: Int = 0
+    var savedScrollOffset: Int = 0
+
+    init {
+        loadImages()
+    }
 
     override fun markAsDeleted(imageIds: Set<Long>, fromDetail: Boolean) {
         _isDeletedFromDetail.value = fromDetail
@@ -82,6 +89,22 @@ class GalleryViewModel(
         _hiddenImageIds.value -= imageId
     }
 
+    override fun restoreSelection(imageIds: Set<Long>) {
+        if (_selectedImageIds.value.isEmpty() && imageIds.isNotEmpty()) {
+            _selectedImageIds.value = imageIds
+        }
+    }
+
+    override fun upsertImage(image: GalleryImage) {
+        val current = _images.value
+        val existingIdx = current.indexOfFirst { it.id == image.id }
+        _images.value = if (existingIdx >= 0) {
+            current.toMutableList().apply { set(existingIdx, image) }
+        } else {
+            (listOf(image) + current).sortedByDescending { it.dateAdded }
+        }
+    }
+
     override fun clearDeletedState() {
         _deletedImageIds.value = emptySet()
         _isDeletedFromDetail.value = false
@@ -107,18 +130,40 @@ class GalleryViewModel(
         _selectedImageIds.value = emptySet()
     }
 
-    fun loadImages() {
-        logger.d { "loadImages called for albumId: $albumId" }
+    override fun loadImages(force: Boolean) {
+        logger.d { "loadImages called for albumId: $albumId (force=$force)" }
         viewModelScope.launch {
-            _isLoading.value = true
+            val wasEmpty = _images.value.isEmpty()
+            if (wasEmpty) {
+                _isLoading.value = true
+            }
             try {
+                val existingById = _images.value.associateBy { it.id }
                 val result = if (albumId != null) {
                     repository.getImagesByAlbum(albumId)
                 } else {
                     repository.getImages()
                 }
-                logger.d { "Loaded ${result.size} images" }
-                _images.value = result
+                val merged = result.map { item ->
+                    val prev = existingById[item.id]
+                    if (prev != null && (prev.cameraModel != null || prev.latitude != null || prev.shutterSpeed != null)) {
+                        item.copy(
+                            latitude = prev.latitude,
+                            longitude = prev.longitude,
+                            shutterSpeed = prev.shutterSpeed,
+                            cameraModel = prev.cameraModel,
+                            cameraManufacturer = prev.cameraManufacturer,
+                            iso = prev.iso,
+                            aperture = prev.aperture,
+                            focalLength = prev.focalLength,
+                            software = prev.software
+                        )
+                    } else {
+                        item
+                    }
+                }
+                logger.d { "Loaded ${merged.size} images" }
+                _images.value = merged
             } catch (e: Exception) {
                 logger.e(e) { "Error loading images" }
             } finally {
@@ -132,12 +177,7 @@ class GalleryViewModel(
             _isRefreshing.value = true
             try {
                 repository.refreshMedia()
-                val result = if (albumId != null) {
-                    repository.getImagesByAlbum(albumId)
-                } else {
-                    repository.getImages()
-                }
-                _images.value = result
+                loadImages(force = true)
             } catch (e: Exception) {
                 logger.e(e) { "Error refreshing gallery" }
             } finally {

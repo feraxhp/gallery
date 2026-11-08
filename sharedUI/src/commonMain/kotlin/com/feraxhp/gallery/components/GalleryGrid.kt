@@ -9,11 +9,13 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -67,12 +69,48 @@ fun GalleryGrid(
     animatedVisibilityScope: AnimatedVisibilityScope,
     modifier: Modifier = Modifier,
     topPadding: Dp = 0.dp,
-    gridModifier: Modifier = Modifier
+    gridModifier: Modifier = Modifier,
+    initialScrollIndex: Int = 0,
+    initialScrollOffset: Int = 0,
+    onScrollChanged: (Int, Int) -> Unit = { _, _ -> }
 ) {
+    var savedScrollIndex by rememberSaveable { mutableIntStateOf(initialScrollIndex) }
+    var savedScrollOffset by rememberSaveable { mutableIntStateOf(initialScrollOffset) }
+    var hasRestoredInitialScroll by remember { mutableStateOf(false) }
+
+    val gridState = rememberLazyGridState(
+        initialFirstVisibleItemIndex = savedScrollIndex,
+        initialFirstVisibleItemScrollOffset = savedScrollOffset
+    )
+
+    LaunchedEffect(images.isNotEmpty()) {
+        if (images.isNotEmpty() && !hasRestoredInitialScroll) {
+            hasRestoredInitialScroll = true
+            val targetIdx = if (savedScrollIndex > 0) savedScrollIndex else initialScrollIndex
+            val targetOff = if (savedScrollIndex > 0) savedScrollOffset else initialScrollOffset
+            if (targetIdx > 0 && gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0) {
+                gridState.scrollToItem(targetIdx, targetOff)
+            }
+        }
+    }
+
+    LaunchedEffect(gridState, images.isNotEmpty()) {
+        if (images.isNotEmpty()) {
+            snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
+                .collect { (index, offset) ->
+                    if (hasRestoredInitialScroll) {
+                        savedScrollIndex = index
+                        savedScrollOffset = offset
+                        onScrollChanged(index, offset)
+                    }
+                }
+        }
+    }
+
     // Offset de la propia galería respecto al root para corregir el posicionamiento de la animación
     var galleryOffset by remember { mutableStateOf(Offset.Zero) }
 
-    // Para rastrear posiciones y bitmaps de las imágenes
+    // Para rastrear posiciones y bitmaps de las imágenes visibles en pantalla
     val imageBounds = remember { mutableStateMapOf<Long, androidx.compose.ui.geometry.Rect>() }
     val imageBitmaps = remember { mutableStateMapOf<Long, ImageBitmap>() }
     
@@ -92,7 +130,8 @@ fun GalleryGrid(
     val currentImages by rememberUpdatedState(images)
     val currentOnSetSelection by rememberUpdatedState(onSetSelection)
     val currentSelectedImageIds by rememberUpdatedState(selectedImageIds)
-    
+    val currentDeletedImageIds by rememberUpdatedState(deletedImageIds)
+
     LaunchedEffect(deletedImageIds) {
         if (deletedImageIds.isEmpty()) {
             imagesToGather = emptyMap()
@@ -144,7 +183,7 @@ fun GalleryGrid(
                     delay(100.milliseconds)
                 } else {
                     // Caso 2: Borrado desde el Grid - Con animación de reunión (Gathering)
-                    snapshotFlow { animatedVisibilityScope.transition.targetState == EnterExitState.Visible }
+                    snapshotFlow { animatedVisibilityScope.transition.currentState == EnterExitState.Visible }
                         .first { it }
                     
                     imagesToGather = gatherMap
@@ -261,6 +300,7 @@ fun GalleryGrid(
                 }
             ) {
                 LazyVerticalGrid(
+                    state = gridState,
                     columns = GridCells.Fixed(3),
                     modifier = gridModifier.fillMaxSize(),
                     contentPadding = PaddingValues(
@@ -274,7 +314,7 @@ fun GalleryGrid(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     groupedImages.forEach { (date, imagesInDate) ->
-                        item(span = { GridItemSpan(maxLineSpan) }) {
+                        item(key = "header_${date}", span = { GridItemSpan(maxLineSpan) }) {
                             val monthName = when (date.month) {
                                 kotlinx.datetime.Month.JANUARY -> "enero"
                                 kotlinx.datetime.Month.FEBRUARY -> "febrero"
@@ -313,6 +353,12 @@ fun GalleryGrid(
                                 },
                                 onBitmapLoaded = { bitmap ->
                                     imageBitmaps[image.id] = bitmap
+                                },
+                                onDisposeTile = { id ->
+                                    if (id !in currentDeletedImageIds && id !in activeShatterEffects) {
+                                        imageBounds.remove(id)
+                                        imageBitmaps.remove(id)
+                                    }
                                 },
                                 sharedTransitionScope = sharedTransitionScope,
                                 animatedVisibilityScope = animatedVisibilityScope,
@@ -386,6 +432,8 @@ fun GalleryGrid(
                                 ),
                             onAnimationEnd = {
                                 activeShatterEffects = activeShatterEffects - id
+                                imageBounds.remove(id)
+                                imageBitmaps.remove(id)
                             }
                         )
                     }

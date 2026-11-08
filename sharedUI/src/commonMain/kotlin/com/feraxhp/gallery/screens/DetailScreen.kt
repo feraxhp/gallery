@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,7 +24,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -34,6 +34,8 @@ import androidx.media3.common.util.Log
 import androidx.media3.common.util.UnstableApi
 import coil3.compose.AsyncImage
 import com.feraxhp.gallery.components.MapPreview
+import com.feraxhp.gallery.components.MetadataItem
+import com.feraxhp.gallery.components.MetadataSection
 import com.feraxhp.gallery.components.VideoPlayer
 import com.feraxhp.gallery.model.GalleryImage
 import com.feraxhp.gallery.model.MediaType
@@ -60,6 +62,10 @@ fun DetailScreen(
     isMetadataLoading: Boolean = false,
     selectedImageId: Long? = null,
     onBack: () -> Unit,
+    onEdit: () -> Unit,
+    onShare: () -> Unit,
+    onMoveToAlbum: () -> Unit,
+    onDelete: () -> Unit,
     topPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val pagerState = rememberPagerState(initialPage = initialIndex) { images.size }
@@ -116,53 +122,94 @@ fun DetailScreen(
 
     val backgroundAlpha = (baseAlpha * (1f - (currentOffsetY / 600f).coerceIn(0f, 1f)))
 
-    with(sharedTransitionScope) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = backgroundAlpha))
-                .padding(top = topPadding),
-            contentAlignment = Alignment.Center
-        ) {
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize(),
-                userScrollEnabled = userScrollEnabled,
-                key = { images[it].id },
-                pageSpacing = 16.dp
-            ) { page ->
-                val isSharedElement = if (isVisible) {
-                    if (isTransitionRunning) page == initialIndex else page == pagerState.currentPage
-                } else {
-                    page == pagerState.currentPage
-                }
+    val showTopBar = isVisible && !isTransitionRunning && userScrollEnabled && currentOffsetY < 10f
 
-                DetailImageItem(
-                    image = images[page],
-                    sharedTransitionScope = this@with,
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    isSharedElement = isSharedElement,
-                    isVisible = isVisible,
-                    onBack = onBack,
-                    onScaleChanged = { scale ->
-                        pageScales[page] = scale
+    Scaffold(
+        containerColor = Color.Black.copy(alpha = backgroundAlpha),
+        topBar = {
+            AnimatedVisibility(
+                visible = showTopBar,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                TopAppBar(
+                    title = { Text("Detalle") },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Black.copy(alpha = 0.5f),
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White,
+                        actionIconContentColor = Color.White
+                    ),
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás")
+                        }
                     },
-                    onOffsetYChanged = { offset ->
-                        pageOffsetsY[page] = offset
-                    },
-                    onSwipeUp = {
-                        showBottomSheet = true
+                    actions = {
+                        IconButton(onClick = onEdit) {
+                            Icon(Icons.Default.Edit, contentDescription = "Editar")
+                        }
+                        IconButton(onClick = onShare) {
+                            Icon(Icons.Default.Share, contentDescription = "Compartir")
+                        }
+                        IconButton(onClick = onMoveToAlbum) {
+                            Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = "Mover")
+                        }
+                        IconButton(onClick = onDelete) {
+                            Icon(Icons.Default.Delete, contentDescription = "Borrar")
+                        }
                     }
                 )
             }
+        }
+    ) { innerPadding ->
+        with(sharedTransitionScope) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = innerPadding.calculateBottomPadding()), // Apply only bottom padding
+                contentAlignment = Alignment.Center
+            ) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    userScrollEnabled = userScrollEnabled,
+                    key = { images[it].id },
+                    pageSpacing = 16.dp
+                ) { page ->
+                    val isSharedElement = if (isVisible) {
+                        if (isTransitionRunning) page == initialIndex else page == pagerState.currentPage
+                    } else {
+                        page == pagerState.currentPage
+                    }
 
-            if (showBottomSheet) {
-                MetadataBottomSheet(
-                    image = images[pagerState.currentPage],
-                    repository = repository,
-                    isMetadataLoading = isMetadataLoading,
-                    onDismiss = { showBottomSheet = false }
-                )
+                    DetailImageItem(
+                        image = images[page],
+                        sharedTransitionScope = this@with,
+                        animatedVisibilityScope = animatedVisibilityScope,
+                        isSharedElement = isSharedElement,
+                        isVisible = isVisible,
+                        onBack = onBack,
+                        onScaleChanged = { scale ->
+                            pageScales[page] = scale
+                        },
+                        onOffsetYChanged = { offset ->
+                            pageOffsetsY[page] = offset
+                        },
+                        onSwipeUp = {
+                            showBottomSheet = true
+                        }
+                    )
+                }
+
+                if (showBottomSheet) {
+                    MetadataBottomSheet(
+                        image = images[pagerState.currentPage],
+                        repository = repository,
+                        isMetadataLoading = isMetadataLoading,
+                        onDismiss = { showBottomSheet = false }
+                    )
+                }
             }
         }
     }
@@ -751,83 +798,7 @@ private fun MetadataBottomSheet(
     }
 }
 
-@Composable
-private fun MetadataSection(
-    title: String,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text(
-            text = title.uppercase(),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.outline,
-            modifier = Modifier.padding(bottom = 4.dp)
-        )
-        content()
-        HorizontalDivider(
-            modifier = Modifier.padding(top = 8.dp),
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-        )
-    }
-}
 
-@Composable
-private fun MetadataItem(
-    icon: ImageVector,
-    label: String,
-    value: String?,
-    errorText: String = "Desconocido",
-    onIconClick: (() -> Unit)? = null,
-    onValueClick: (() -> Unit)? = null
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            shape = CircleShape,
-            modifier = Modifier
-                .size(40.dp)
-                .then(if (onIconClick != null) Modifier.clickable { onIconClick() } else Modifier)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-            }
-        }
-        Column(
-            modifier = Modifier
-                .padding(start = 16.dp)
-                .then(if (onValueClick != null) Modifier.clickable { onValueClick() } else Modifier)
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
-            if (value != null) {
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.bodyLarge
-                )
-            } else {
-                Text(
-                    text = errorText,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
-        }
-    }
-}
 
 private fun formatFileSize(size: Long?): String {
     if (size == null || size <= 0) return "Desconocido"

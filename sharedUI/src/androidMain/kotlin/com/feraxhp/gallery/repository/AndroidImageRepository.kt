@@ -741,6 +741,164 @@ class AndroidImageRepository(private val context: Context) : ImageRepository {
             }
         }
     }
+
+    override suspend fun saveEditedImage(
+        sourceUri: String,
+        totalRotation: Float,
+        flipH: Boolean,
+        flipV: Boolean,
+        straightenAngle: Float,
+        normalizedCropRect: androidx.compose.ui.geometry.Rect?,
+        boundsMode: com.feraxhp.gallery.viewmodel.BoundsMode
+    ): GalleryImage? = withContext(Dispatchers.IO) {
+        try {
+            val uri = Uri.parse(sourceUri)
+            val contentResolver = context.contentResolver
+
+            val exifRotation = contentResolver.openInputStream(uri)?.use { input ->
+                val exif = ExifInterface(input)
+                when (exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
+                    ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                    ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                    ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                    else -> 0f
+                }
+            } ?: 0f
+
+            val rawBitmap = contentResolver.openInputStream(uri)?.use { input ->
+                BitmapFactory.decodeStream(input)
+            } ?: return@withContext null
+
+            val baseBitmap = if (exifRotation != 0f) {
+                val m = android.graphics.Matrix().apply { postRotate(exifRotation) }
+                android.graphics.Bitmap.createBitmap(rawBitmap, 0, 0, rawBitmap.width, rawBitmap.height, m, true).also {
+                    if (it != rawBitmap) rawBitmap.recycle()
+                }
+            } else {
+                rawBitmap
+            }
+
+            val srcW = baseBitmap.width.toFloat()
+            val srcH = baseBitmap.height.toFloat()
+            val isSwapped = (kotlin.math.abs(kotlin.math.round(totalRotation).toInt()) % 180) != 0
+            val rotW = if (isSwapped) srcH else srcW
+            val rotH = if (isSwapped) srcW else srcH
+            val effectiveRatio = rotW / rotH
+
+            val rad = kotlin.math.abs(straightenAngle) * (Math.PI.toFloat() / 180f)
+            val cosA = kotlin.math.cos(rad)
+            val sinA = kotlin.math.sin(rad)
+
+            val outerW = (rotW * cosA + rotH * sinA).coerceAtLeast(1f)
+            val outerH = (rotW * sinA + rotH * cosA).coerceAtLeast(1f)
+            val outWInt = kotlin.math.round(outerW).toInt().coerceAtLeast(1)
+            val outHInt = kotlin.math.round(outerH).toInt().coerceAtLeast(1)
+
+            val transformedBitmap = android.graphics.Bitmap.createBitmap(
+                outWInt,
+                outHInt,
+                android.graphics.Bitmap.Config.ARGB_8888
+            )
+            val canvas = android.graphics.Canvas(transformedBitmap)
+            val matrix = android.graphics.Matrix().apply {
+                postTranslate(-srcW / 2f, -srcH / 2f)
+                postRotate(totalRotation)
+                postScale(if (flipH) -1f else 1f, if (flipV) -1f else 1f)
+                postRotate(straightenAngle)
+                postTranslate(outWInt / 2f, outHInt / 2f)
+            }
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG or android.graphics.Paint.FILTER_BITMAP_FLAG)
+            canvas.drawBitmap(baseBitmap, matrix, paint)
+            if (transformedBitmap != baseBitmap) {
+                baseBitmap.recycle()
+            }
+
+            val baseBoundsInOut = androidx.compose.ui.geometry.Rect(
+                (outWInt - rotW) / 2f,
+                (outHInt - rotH) / 2f,
+                (outWInt + rotW) / 2f,
+                (outHInt + rotH) / 2f
+            )
+            val outerBoundsInOut = androidx.compose.ui.geometry.Rect(0f, 0f, outWInt.toFloat(), outHInt.toFloat())
+
+            val rawCropInOut = if (normalizedCropRect != null) {
+                androidx.compose.ui.geometry.Rect(
+                    left = baseBoundsInOut.left + normalizedCropRect.left.coerceIn(0f, 1f) * baseBoundsInOut.width,
+                    top = baseBoundsInOut.top + normalizedCropRect.top.coerceIn(0f, 1f) * baseBoundsInOut.height,
+                    right = baseBoundsInOut.left + normalizedCropRect.right.coerceIn(0f, 1f) * baseBoundsInOut.width,
+                    bottom = baseBoundsInOut.top + normalizedCropRect.bottom.coerceIn(0f, 1f) * baseBoundsInOut.height
+                )
+            } else {
+                if (boundsMode == com.feraxhp.gallery.viewmodel.BoundsMode.FIT) outerBoundsInOut else baseBoundsInOut
+            }
+
+            val finalCropRect = if (boundsMode == com.feraxhp.gallery.viewmodel.BoundsMode.CROP && kotlin.math.abs(straightenAngle) > 0.01f) {
+                com.feraxhp.gallery.components.editor.constrainRectInsideRotatedPhoto(
+                    rect = rawCropInOut,
+                    photoCenter = androidx.compose.ui.geometry.Offset(outWInt / 2f, outHInt / 2f),
+                    photoW = rotW,
+                    photoH = rotH,
+                    angleDegrees = straightenAngle
+                )
+            } else {
+                rawCropInOut
+            }
+
+            val cropL = finalCropRect.left.toInt().coerceIn(0, outWInt - 1)
+            val cropT = finalCropRect.top.toInt().coerceIn(0, outHInt - 1)
+            val cropR = finalCropRect.right.toInt().coerceIn(cropL + 1, outWInt)
+            val cropB = finalCropRect.bottom.toInt().coerceIn(cropT + 1, outHInt)
+
+            val finalBitmap = android.graphics.Bitmap.createBitmap(
+                transformedBitmap,
+                cropL,
+                cropT,
+                (cropR - cropL).coerceAtLeast(1),
+                (cropB - cropT).coerceAtLeast(1)
+            ).also {
+                if (it != transformedBitmap) transformedBitmap.recycle()
+            }
+
+            val usePngWithAlpha = boundsMode == com.feraxhp.gallery.viewmodel.BoundsMode.FIT && kotlin.math.abs(straightenAngle) > 0.05f
+            val ext = if (usePngWithAlpha) "png" else "jpg"
+            val mime = if (usePngWithAlpha) "image/png" else "image/jpeg"
+            val compressFormat = if (usePngWithAlpha) {
+                android.graphics.Bitmap.CompressFormat.PNG
+            } else {
+                android.graphics.Bitmap.CompressFormat.JPEG
+            }
+
+            val fileName = "Edited_${System.currentTimeMillis()}.$ext"
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, mime)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/Gallery/")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+            }
+
+            val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            val newUri = contentResolver.insert(collection, values) ?: return@withContext null
+
+            contentResolver.openOutputStream(newUri)?.use { output ->
+                finalBitmap.compress(compressFormat, 95, output)
+            }
+            finalBitmap.recycle()
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                values.clear()
+                values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                contentResolver.update(newUri, values, null, null)
+            }
+
+            val newId = ContentUris.parseId(newUri)
+            getImageById(newId, MediaType.IMAGE) ?: getImageByUri(newUri.toString())
+        } catch (e: Exception) {
+            Log.e("GalleryRepo", "Error saving edited image: ${e.message}", e)
+            null
+        }
+    }
 }
 
 private data class ExifMetadata(

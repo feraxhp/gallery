@@ -18,4 +18,13 @@ interface ImageRepository {
     fun shareImage(image: GalleryImage)
     fun shareImages(images: List<GalleryImage>)
     suspend fun refreshMedia()
+    suspend fun saveEditedImage(
+        sourceUri: String,
+        totalRotation: Float,
+        flipH: Boolean,
+        flipV: Boolean,
+        straightenAngle: Float,
+        normalizedCropRect: androidx.compose.ui.geometry.Rect?,
+        boundsMode: com.feraxhp.gallery.viewmodel.BoundsMode = com.feraxhp.gallery.viewmodel.BoundsMode.FIT
+    ): GalleryImage? = null
 }

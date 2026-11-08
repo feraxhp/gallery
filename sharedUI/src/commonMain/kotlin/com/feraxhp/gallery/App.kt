@@ -55,6 +55,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PhotoAlbum
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Share
@@ -120,7 +121,9 @@ import com.feraxhp.gallery.repository.ImageRepository
 import com.feraxhp.gallery.screens.AlbumsScreen
 import com.feraxhp.gallery.screens.AlbumGalleryScreen
 import com.feraxhp.gallery.screens.DetailScreen
+import com.feraxhp.gallery.screens.EditScreen
 import com.feraxhp.gallery.screens.GalleryScreen
+import com.feraxhp.gallery.screens.HomeScreen
 import com.feraxhp.gallery.screens.MoveToAlbumScreen
 import com.feraxhp.gallery.screens.PermissionsScreen
 import com.feraxhp.gallery.util.SetSystemBarsColor
@@ -154,7 +157,7 @@ fun App(
     var backStack by remember {
         mutableStateOf(
             listOf<Destination>(
-                if (hasReadPermission && hasWritePermission) Destination.Gallery else Destination.Permissions
+                if (hasReadPermission && hasWritePermission) Destination.Home else Destination.Permissions
             )
         )
     }
@@ -162,7 +165,7 @@ fun App(
     LaunchedEffect(initialMediaUri, hasReadPermission, hasWritePermission) {
         if (initialMediaUri != null && hasReadPermission && hasWritePermission) {
             // Navegamos al detalle externo instantáneamente
-            backStack = listOf(Destination.Gallery, Destination.ExternalDetail(initialMediaUri))
+            backStack = listOf(Destination.Home, Destination.ExternalDetail(initialMediaUri))
             onUriConsumed()
         }
     }
@@ -174,7 +177,7 @@ fun App(
 
     LaunchedEffect(hasReadPermission, hasWritePermission) {
         if (hasReadPermission && hasWritePermission && backStack.lastOrNull() == Destination.Permissions) {
-            backStack = listOf(Destination.Gallery)
+            backStack = listOf(Destination.Home)
         }
     }
 
@@ -326,14 +329,310 @@ fun App(
     }
 
     DynamicTheme {
-        val appBarContainerColor by animateColorAsState(
-            if (isDetailActive) Color.Black else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-        )
-        val appBarContentColor by animateColorAsState(if (isDetailActive) Color.White else MaterialTheme.colorScheme.onSurface)
+        Box(
+            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)
+        ) {
+            SharedTransitionLayout {
+                NavDisplay(
+                    modifier = Modifier.fillMaxSize().background(Color.Black),
+                    backStack = backStack,
+                    sharedTransitionScope = this,
+                    onBack = {
+                        if (backStack.size > 1) {
+                            backStack = backStack.dropLast(1)
+                        }
+                    },
+                    popTransitionSpec = {
+                        val duration = 600
+                        fadeIn(tween(duration)) togetherWith fadeOut(tween(duration))
+                    },
+                    predictivePopTransitionSpec = {
+                        val initial = initialState.key
+                        val target = targetState.key
+                        
+                        val isAlbumGalleryToHome = initial is Destination.AlbumGallery && target is Destination.Home
 
-        Scaffold(
-            containerColor = MaterialTheme.colorScheme.surface,
-            snackbarHost = {
+                        val scale = if (isAlbumGalleryToHome) 0.8f else 1.0f
+                        val targetAlpha = if (isAlbumGalleryToHome) 0.8f else 0.0f
+                        val duration = 5
+
+                        fadeIn(tween(duration)) togetherWith
+                                fadeOut(tween(duration), targetAlpha = targetAlpha) +
+                                scaleOut(targetScale = scale, animationSpec = tween(duration))
+                    },
+                    transitionSpec = {
+                        val duration = 600
+                        fadeIn(tween(duration)) togetherWith fadeOut(tween(duration))
+                    },
+                    entryProvider = { key: Destination ->
+                        when (key) {
+                            Destination.Permissions -> NavEntry(key) {
+                                PermissionsScreen(
+                                    hasReadPermission = currentReadPermission,
+                                    hasWritePermission = currentWritePermission,
+                                    onRequestReadPermission = onRequestReadPermission,
+                                    onRequestWritePermission = onRequestWritePermission,
+                                    topPadding = 0.dp,
+                                    onContinue = {
+                                        backStack = listOf(Destination.Home)
+                                    }
+                                )
+                            }
+
+                            is Destination.ExternalDetail -> NavEntry(key) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize().background(Color.Black),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+                                }
+                                LaunchedEffect(key.uri) {
+                                    val image = repository.getImageByUri(key.uri)
+                                    if (image != null) {
+                                        backStack = backStack.dropLast(1) + Destination.Detail(image, listOf(image))
+                                    } else {
+                                        backStack = listOf(Destination.Home)
+                                    }
+                                }
+                            }
+
+                            Destination.Home -> NavEntry(key) {
+                                LaunchedEffect(Unit) { isDetailActive = false }
+                                val animatedVisibilityScope = LocalNavAnimatedContentScope.current
+                                val viewModel: GalleryViewModel = viewModel { GalleryViewModel(repository) }
+                                LaunchedEffect(viewModel) { activeActionHandler = viewModel }
+                                
+                                HomeScreen(
+                                    repository = repository,
+                                    galleryViewModel = viewModel,
+                                    sharedTransitionScope = this@SharedTransitionLayout,
+                                    animatedVisibilityScope = animatedVisibilityScope,
+                                    onNavigateToDetail = { image, images ->
+                                        currentImageInDetail = image
+                                        backStack = backStack + Destination.Detail(image, images)
+                                    },
+                                    onNavigateToAlbumGallery = { album ->
+                                        backStack = backStack + Destination.AlbumGallery(album.id, album.name)
+                                    },
+                                    onNavigateToMoveToAlbum = { images, all ->
+                                        backStack = backStack + Destination.MoveToAlbum(images, all)
+                                    },
+                                    onShareImages = { images ->
+                                        repository.shareImages(images)
+                                    },
+                                    onDeleteImages = {
+                                        showDeleteConfirmation = true
+                                    }
+                                )
+                            }
+
+                            is Destination.AlbumGallery -> NavEntry(key) {
+                                LaunchedEffect(Unit) { isDetailActive = false }
+                                val animatedVisibilityScope = LocalNavAnimatedContentScope.current
+                                val viewModel: GalleryViewModel = viewModel(key = key.albumId) { GalleryViewModel(repository, key.albumId) }
+                                LaunchedEffect(viewModel) { activeActionHandler = viewModel }
+                                AlbumGalleryScreen(
+                                    viewModel = viewModel,
+                                    albumId = key.albumId,
+                                    albumName = key.albumName,
+                                    onBack = {
+                                        if (backStack.size > 1) {
+                                            backStack = backStack.dropLast(1)
+                                        }
+                                    },
+                                    onImageClick = { image, allImages ->
+                                        currentImageInDetail = image
+                                        backStack = backStack + Destination.Detail(image, allImages)
+                                    },
+                                    onNavigateToMoveToAlbum = { images, all ->
+                                        backStack = backStack + Destination.MoveToAlbum(images, all)
+                                    },
+                                    onShareImages = { images ->
+                                        repository.shareImages(images)
+                                    },
+                                    onDeleteImages = { images ->
+                                        showDeleteConfirmation = true
+                                    },
+                                    sharedTransitionScope = this@SharedTransitionLayout,
+                                    animatedVisibilityScope = animatedVisibilityScope
+                                )
+                            }
+
+                            is Destination.Detail -> NavEntry(
+                                key,
+                                metadata = metadata {
+                                    put(NavDisplay.TransitionKey) {
+                                        fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
+                                    }
+                                    put(NavDisplay.PopTransitionKey) {
+                                        fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
+                                    }
+                                }
+                            ) {
+                                val animatedVisibilityScope = LocalNavAnimatedContentScope.current
+                                val isTargetVisible = animatedVisibilityScope.transition.targetState == EnterExitState.Visible
+                                LaunchedEffect(isTargetVisible) {
+                                    isDetailActive = isTargetVisible
+                                }
+
+                                val vmImages by activeActionHandler?.images?.collectAsState() ?: remember { mutableStateOf(emptyList<GalleryImage>()) }
+                                val isExternal = remember(key.image) {
+                                    key.allImages.size == 1 && activeActionHandler?.images?.value?.none { it.id == key.image.id } == true
+                                }
+                                val imagesToShow = if (isExternal) key.allImages else vmImages
+                                val loadingIds by activeActionHandler?.loadingMetadataIds?.collectAsState() ?: remember { mutableStateOf(emptySet<Long>()) }
+
+                                DetailScreen(
+                                    images = imagesToShow,
+                                    initialIndex = imagesToShow.indexOfFirst { it.id == key.image.id }.coerceAtLeast(0),
+                                    sharedTransitionScope = this@SharedTransitionLayout,
+                                    animatedVisibilityScope = animatedVisibilityScope,
+                                    repository = repository,
+                                    onImageChange = { currentImageInDetail = it },
+                                    onLoadMetadata = { activeActionHandler?.loadFullMetadata(it) },
+                                    isMetadataLoading = currentImageInDetail?.id in loadingIds,
+                                    selectedImageId = currentImageInDetail?.id,
+                                    topPadding = 0.dp,
+                                    onBack = {
+                                        if (backStack.size > 1) {
+                                            backStack = backStack.dropLast(1)
+                                        }
+                                    },
+                                    onEdit = {
+                                        currentImageInDetail?.let {
+                                            backStack = backStack + Destination.Edit(it.uri)
+                                        }
+                                    },
+                                    onShare = {
+                                        currentImageInDetail?.let { repository.shareImage(it) }
+                                    },
+                                    onMoveToAlbum = {
+                                        currentImageInDetail?.let {
+                                            backStack = backStack + Destination.MoveToAlbum(listOf(it), imagesToShow)
+                                        }
+                                    },
+                                    onDelete = {
+                                        showDeleteConfirmation = true
+                                    }
+                                )
+                            }
+
+                            is Destination.Edit -> NavEntry(key) {
+                                EditScreen(
+                                    imageUri = key.uri,
+                                    repository = repository,
+                                    onImageSaved = { savedImage ->
+                                        currentImageInDetail = savedImage
+                                        if (backStack.size > 1 && backStack[backStack.size - 2] is Destination.Detail) {
+                                            val detailDest = backStack[backStack.size - 2] as Destination.Detail
+                                            val updatedList = listOf(savedImage) + detailDest.allImages.filter { it.id != savedImage.id }
+                                            backStack = backStack.dropLast(2) + Destination.Detail(savedImage, updatedList)
+                                        } else if (backStack.size > 1) {
+                                            backStack = backStack.dropLast(1)
+                                        }
+                                        scope.launch {
+                                            snackbarHostState.currentSnackbarData?.dismiss()
+                                            snackbarHostState.showSnackbar("Imagen guardada")
+                                        }
+                                    },
+                                    onBack = {
+                                        if (backStack.size > 1) {
+                                            backStack = backStack.dropLast(1)
+                                        }
+                                    }
+                                )
+                            }
+
+                            is Destination.MoveToAlbum -> NavEntry(key) {
+                                MoveToAlbumScreen(
+                                    repository = repository,
+                                    isProcessing = isProcessingAction,
+                                    progress = actionProgress,
+                                    progressText = actionProgressText,
+                                    onAlbumSelected = { album ->
+                                        scope.launch {
+                                            isProcessingAction = true
+                                            val total = key.images.size
+                                            val handler = activeActionHandler
+                                            val originalImagesState = key.images.map { it.id to it.albumId }
+                                            
+                                            val updatedImages = mutableListOf<GalleryImage>()
+                                            val successfulMoves = mutableListOf<Pair<GalleryImage, GalleryImage?>>()
+                                            
+                                            key.images.forEachIndexed { index, image ->
+                                                actionProgress = (index + 1).toFloat() / total
+                                                actionProgressText = "${index + 1} de $total"
+                                                
+                                                val movedImage = repository.moveImage(image, album.id)
+                                                successfulMoves.add(image to movedImage)
+                                                updatedImages.add(movedImage ?: image)
+                                            }
+                                            
+                                            val anySuccess = successfulMoves.any { it.second != null }
+                                            
+                                            if (anySuccess) {
+                                                val newAllImages = key.allImages.map { current ->
+                                                    updatedImages.find { it.id == current.id } ?: current
+                                                }
+                                                
+                                                // Actualizamos la entrada anterior en el backstack (el Detail si venía de ahí)
+                                                if (backStack.size > 1 && backStack[backStack.size - 2] is Destination.Detail) {
+                                                    val detailDest = backStack[backStack.size - 2] as Destination.Detail
+                                                    val newCurrentImage = updatedImages.find { it.id == detailDest.image.id } ?: detailDest.image
+                                                    backStack = backStack.dropLast(1).dropLast(1) + Destination.Detail(newCurrentImage, newAllImages)
+                                                } else {
+                                                    backStack = backStack.dropLast(1)
+                                                }
+                                                
+                                                handler?.clearSelection()
+                                                
+                                                isProcessingAction = false
+                                                
+                                                snackbarHostState.currentSnackbarData?.dismiss()
+                                                val successCount = successfulMoves.count { it.second != null }
+                                                val snackbarMessage = if (successCount == 1) 
+                                                    "Imagen movida a ${album.name}" 
+                                                else "$successCount imágenes movidas a ${album.name}"
+                                                
+                                                val result = snackbarHostState.showSnackbar(
+                                                    message = snackbarMessage,
+                                                    actionLabel = "Deshacer",
+                                                    duration = SnackbarDuration.Short
+                                                )
+                                                
+                                                if (result == SnackbarResult.ActionPerformed) {
+                                                    successfulMoves.filter { it.second != null }.forEach { (originalImage, movedImage) ->
+                                                        val originalAlbumId = originalImagesState.find { it.first == originalImage.id }?.second
+                                                        if (originalAlbumId != null && movedImage != null) {
+                                                            repository.moveImage(movedImage, originalAlbumId)
+                                                        }
+                                                    }
+                                                    snackbarHostState.showSnackbar("Movimiento cancelado")
+                                                }
+                                            } else {
+                                                isProcessingAction = false
+                                                snackbarHostState.currentSnackbarData?.dismiss()
+                                                snackbarHostState.showSnackbar("Error al mover")
+                                                if (backStack.size > 1) {
+                                                    backStack = backStack.dropLast(1)
+                                                }
+                                            }
+                                        }
+                                    },
+                                    onBack = {
+                                        if (backStack.size > 1) {
+                                            backStack = backStack.dropLast(1)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                )
+            }
+            
+            // Render Snackbar at the bottom
+            Box(modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp)) {
                 SnackbarHost(snackbarHostState) { data ->
                     val message = data.visuals.message
                     val annotatedString = if (message.startsWith("Imagen movida a ")) {
@@ -357,8 +656,7 @@ fun App(
                     Snackbar(
                         modifier = Modifier
                             .padding(horizontal = 32.dp)
-                            .clip(shape = MaterialTheme.shapes.medium)
-                        ,
+                            .clip(shape = MaterialTheme.shapes.medium),
                         action = {
                             data.visuals.actionLabel?.let { actionLabel ->
                                 TextButton(
@@ -374,487 +672,6 @@ fun App(
                     ) {
                         Text(annotatedString)
                     }
-                }
-            },
-            topBar = {
-                val title = when (currentDestination) {
-                    Destination.Permissions -> ""
-                    Destination.Gallery -> if (selectedIds.isNotEmpty()) "${selectedIds.size} seleccionadas" else "Fotos"
-                    Destination.Albums -> "Álbumes"
-                    is Destination.AlbumGallery -> if (selectedIds.isNotEmpty()) "${selectedIds.size} seleccionadas" else currentDestination.albumName
-                    is Destination.Detail -> "Detalle"
-                    is Destination.MoveToAlbum -> "Mover a álbum"
-                    else -> ""
-                }
-                TopAppBar(
-                    title = { Text(title) },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = appBarContainerColor,
-                        titleContentColor = appBarContentColor,
-                        navigationIconContentColor = appBarContentColor,
-                        actionIconContentColor = appBarContentColor
-                    ),
-                    navigationIcon = {
-                        if (selectedIds.isNotEmpty()) {
-                            IconButton(onClick = { activeActionHandler?.clearSelection() }) {
-                                Icon(Icons.Default.Close, contentDescription = "Cerrar selección")
-                            }
-                        } else if (backStack.size > 1 && currentDestination != Destination.Albums) {
-                            IconButton(onClick = {
-                                if (backStack.size > 1) {
-                                    backStack = backStack.dropLast(1)
-                                }
-                            }) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Atrás"
-                                )
-                            }
-                        }
-                    },
-                    actions = {
-                        if (currentDestination is Destination.Detail && isDetailActive && currentImageInDetail != null) {
-                            IconButton(onClick = {
-                                currentImageInDetail?.let {
-                                    repository.shareImage(it)
-                                }
-                            }) {
-                                Icon(Icons.Default.Share, contentDescription = "Compartir")
-                            }
-                            IconButton(onClick = {
-                                currentImageInDetail?.let {
-                                    backStack = backStack + Destination.MoveToAlbum(
-                                        listOf(it),
-                                        (currentDestination as Destination.Detail).allImages
-                                    )
-                                }
-                            }) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.DriveFileMove,
-                                    contentDescription = "Mover"
-                                )
-                            }
-                            IconButton(onClick = {
-                                showDeleteConfirmation = true
-                            }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Borrar")
-                            }
-                        } else if (selectedImages.isNotEmpty()) {
-                            IconButton(onClick = {
-                                repository.shareImages(selectedImages)
-                            }) {
-                                Icon(Icons.Default.Share, contentDescription = "Compartir seleccionadas")
-                            }
-                            IconButton(onClick = {
-                                backStack = backStack + Destination.MoveToAlbum(
-                                    selectedImages,
-                                    allImages
-                                )
-                            }) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.DriveFileMove,
-                                    contentDescription = "Mover seleccionadas"
-                                )
-                            }
-                            IconButton(onClick = {
-                                showDeleteConfirmation = true
-                            }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Borrar seleccionadas")
-                            }
-                        }
-                    }
-                )
-            }
-        ) { padding ->
-            val topPadding = padding.calculateTopPadding()
-            Box(
-                Modifier.fillMaxSize()
-            ) {
-                if (!isDetailActive) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(topPadding + 20.dp)
-                            .background(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
-                                        MaterialTheme.colorScheme.surface.copy(alpha = 0.4f),
-                                        Color.Transparent
-                                    )
-                                )
-                            )
-                            .zIndex(1f)
-                    )
-                }
-
-                val isActuallyInDetail = currentDestination is Destination.Detail && isDetailActive
-                val showBottomBar = hasReadPermission && (
-                        currentDestination == Destination.Gallery ||
-                        currentDestination == Destination.Albums ||
-                                (currentDestination is Destination.Detail && !isDetailActive)
-                        )
-
-                if (showBottomBar && !isActuallyInDetail) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(110.dp)
-                            .align(Alignment.BottomCenter)
-                            .background(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color.Transparent,
-                                        MaterialTheme.colorScheme.background.copy(alpha = 0.1f),
-                                        MaterialTheme.colorScheme.background.copy(alpha = 0.5f),
-                                        MaterialTheme.colorScheme.background.copy(alpha = 0.75f)
-                                    )
-                                )
-                            )
-                            .zIndex(0.9f)
-                    )
-                }
-
-                AnimatedVisibility (
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomCenter)
-                        .navigationBarsPadding()
-                        .offset(y = (-16).dp)
-                        .zIndex(1f),
-                    visible = showBottomBar && !isActuallyInDetail,
-                    enter = slideInVertically(
-                        initialOffsetY = { it / 2 }
-                    ) + fadeIn( initialAlpha = 0.3f ),
-                    exit = slideOutVertically(
-                        targetOffsetY = { it / 2 }
-                    ) + fadeOut(),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        HorizontalFloatingToolbar(
-                            expanded = true,
-                            modifier = Modifier.wrapContentWidth(),
-                            colors = FloatingToolbarDefaults.standardFloatingToolbarColors(
-                                toolbarContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-                            ),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                            expandedShadowElevation = 6.dp,
-                            content = {
-                                NavigationItem(
-                                    selected = currentDestination == Destination.Gallery,
-                                    label = "Fotos",
-                                    icon = Icons.Default.PhotoLibrary,
-                                    modifier = Modifier.width(100.dp),
-                                    onClick = {
-                                        if (currentDestination != Destination.Gallery) {
-                                            backStack = listOf(Destination.Gallery)
-                                        }
-                                    }
-                                )
-                                NavigationItem(
-                                    selected = currentDestination == Destination.Albums || currentDestination is Destination.AlbumGallery,
-                                    label = "Álbumes",
-                                    icon = Icons.Default.PhotoAlbum,
-                                    modifier = Modifier.width(100.dp),
-                                    onClick = {
-                                        if (currentDestination != Destination.Albums) {
-                                            backStack = listOf(Destination.Gallery, Destination.Albums)
-                                        }
-                                    }
-                                )
-                            }
-                        )
-
-                        Spacer(Modifier.width(12.dp))
-
-                        Surface(
-                            modifier = Modifier.size(52.dp),
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
-                            shadowElevation = 6.dp
-                        ) {
-                            IconButton(
-                                onClick = { /* TODO: Implement filter */ },
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Tune,
-                                    contentDescription = "Filtrar",
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-                SharedTransitionLayout {
-                    NavDisplay(
-                        modifier = Modifier.background(Color.Black),
-                        backStack = backStack,
-                        sharedTransitionScope = this,
-                        onBack = {
-                            if (backStack.size > 1) {
-                                backStack = backStack.dropLast(1)
-                            }
-                        },
-                        popTransitionSpec = {
-//                            val initial = initialState.key
-//                            val target = targetState.key
-
-                            val duration = 600
-                            fadeIn(tween(duration)) togetherWith fadeOut(tween(duration))
-                        },
-                        predictivePopTransitionSpec = {
-                            val initial = initialState.key
-                            val target = targetState.key
-                            val isAlbumToGallery = initial == "Albums" && target == "Gallery"
-                            // val isAlbumGalleryToAlbum = (initial as String).startsWith("AlbumGallery") && target == "Albums"
-
-                            // Log.d("prediction", "transition: $initial -> $target")
-                            // Log.d("prediction", "AG: $isAlbumToGallery")
-                            // Log.d("prediction", "AgG: $isAlbumGalleryToAlbum")
-
-                            val scale = if (isAlbumToGallery) 0.8f else 1.0f
-                            val tagetAlpha = if (isAlbumToGallery) 0.8f else .0f
-                            val duration = 5
-
-                            fadeIn(tween(duration)) togetherWith
-                                    fadeOut(tween(duration), targetAlpha = tagetAlpha) +
-                                    scaleOut(targetScale = scale, animationSpec = tween(duration))
-                        },
-                        transitionSpec = {
-//                            val initial = initialState.key
-//                            val target = targetState.key
-//
-//                            Log.d("prediction", "transition: $initial -> $target")
-                            val duration = 600
-                            fadeIn(tween(duration)) togetherWith fadeOut(tween(duration))
-                        },
-                        entryProvider = { key: Destination ->
-                            when (key) {
-                                Destination.Permissions -> NavEntry(key) {
-                                    PermissionsScreen(
-                                        hasReadPermission = currentReadPermission,
-                                        hasWritePermission = currentWritePermission,
-                                        onRequestReadPermission = onRequestReadPermission,
-                                        onRequestWritePermission = onRequestWritePermission,
-                                        topPadding = topPadding,
-                                        onContinue = {
-                                            backStack = listOf(Destination.Gallery)
-                                        }
-                                    )
-                                }
-
-                                is Destination.ExternalDetail -> NavEntry(key) {
-                                    Box(
-                                        modifier = Modifier.fillMaxSize().background(Color.Black),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        LoadingIndicator(color = MaterialTheme.colorScheme.primary)
-                                    }
-                                    LaunchedEffect(key.uri) {
-                                        val image = repository.getImageByUri(key.uri)
-                                        if (image != null) {
-                                            // Reemplazamos ExternalDetail con el Detail real una vez cargada la imagen
-                                            backStack = backStack.dropLast(1) + Destination.Detail(image, listOf(image))
-                                        } else {
-                                            // Si falla la carga, volvemos a la galería
-                                            backStack = listOf(Destination.Gallery)
-                                        }
-                                    }
-                                }
-
-                                Destination.Gallery -> NavEntry(key) {
-                                    LaunchedEffect(Unit) { isDetailActive = false }
-                                    val animatedVisibilityScope =
-                                        LocalNavAnimatedContentScope.current
-                                    val viewModel: GalleryViewModel = viewModel { GalleryViewModel(repository) }
-                                    LaunchedEffect(viewModel) { activeActionHandler = viewModel }
-                                    GalleryScreen(
-                                        viewModel = viewModel,
-                                        onImageClick = { image, allImages ->
-                                            currentImageInDetail = image
-                                            backStack =
-                                                backStack + Destination.Detail(image, allImages)
-                                        },
-                                        sharedTransitionScope = this@SharedTransitionLayout,
-                                        animatedVisibilityScope = animatedVisibilityScope,
-                                        topPadding = topPadding
-                                    )
-                                }
-
-                                Destination.Albums -> NavEntry(key) {
-                                    LaunchedEffect(Unit) { isDetailActive = false }
-                                    val animatedVisibilityScope =
-                                        LocalNavAnimatedContentScope.current
-                                    AlbumsScreen(
-                                        repository = repository,
-                                        sharedTransitionScope = this@SharedTransitionLayout,
-                                        animatedVisibilityScope = animatedVisibilityScope,
-                                        topPadding = topPadding,
-                                        onAlbumClick = { album ->
-                                            backStack = backStack + Destination.AlbumGallery(
-                                                album.id,
-                                                album.name
-                                            )
-                                        }
-                                    )
-                                }
-
-                                is Destination.AlbumGallery -> NavEntry(key) {
-                                    LaunchedEffect(Unit) { isDetailActive = false }
-                                    val animatedVisibilityScope =
-                                        LocalNavAnimatedContentScope.current
-                                    val viewModel: GalleryViewModel = viewModel(key = key.albumId) { GalleryViewModel(repository, key.albumId) }
-                                    LaunchedEffect(viewModel) { activeActionHandler = viewModel }
-                                    AlbumGalleryScreen(
-                                        viewModel = viewModel,
-                                        albumId = key.albumId,
-                                        onImageClick = { image, allImages ->
-                                            currentImageInDetail = image
-                                            backStack =
-                                                backStack + Destination.Detail(image, allImages)
-                                        },
-                                        sharedTransitionScope = this@SharedTransitionLayout,
-                                        animatedVisibilityScope = animatedVisibilityScope,
-                                        topPadding = topPadding
-                                    )
-                                }
-
-                                is Destination.Detail -> NavEntry(
-                                    key,
-                                    metadata = metadata {
-                                        put(NavDisplay.TransitionKey) {
-                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
-                                        }
-                                        put(NavDisplay.PopTransitionKey) {
-                                            fadeIn(tween(400)) togetherWith fadeOut(tween(400)) + ExitTransition.KeepUntilTransitionsFinished
-                                        }
-                                    }
-                                ) {
-                                    val animatedVisibilityScope =
-                                        LocalNavAnimatedContentScope.current
-                                    val isTargetVisible =
-                                        animatedVisibilityScope.transition.targetState == EnterExitState.Visible
-                                    LaunchedEffect(isTargetVisible) {
-                                        isDetailActive = isTargetVisible
-                                    }
-
-                                    val vmImages by activeActionHandler?.images?.collectAsState() ?: remember { mutableStateOf(emptyList<GalleryImage>()) }
-                                    val isExternal = remember(key.image) {
-                                        key.allImages.size == 1 && activeActionHandler?.images?.value?.none { it.id == key.image.id } == true
-                                    }
-                                    val imagesToShow = if (isExternal) key.allImages else vmImages
-                                    val loadingIds by activeActionHandler?.loadingMetadataIds?.collectAsState() ?: remember { mutableStateOf(emptySet<Long>()) }
-
-                                    DetailScreen(
-                                        images = imagesToShow,
-                                        initialIndex = imagesToShow.indexOfFirst { it.id == key.image.id }
-                                            .coerceAtLeast(0),
-                                        sharedTransitionScope = this@SharedTransitionLayout,
-                                        animatedVisibilityScope = animatedVisibilityScope,
-                                        repository = repository,
-                                        onImageChange = { currentImageInDetail = it },
-                                        onLoadMetadata = { activeActionHandler?.loadFullMetadata(it) },
-                                        isMetadataLoading = currentImageInDetail?.id in loadingIds,
-                                        selectedImageId = currentImageInDetail?.id,
-                                        topPadding = topPadding,
-                                        onBack = {
-                                            if (backStack.size > 1) {
-                                                backStack = backStack.dropLast(1)
-                                            }
-                                        }
-                                    )
-                                }
-
-                                is Destination.MoveToAlbum -> NavEntry(key) {
-                                    MoveToAlbumScreen(
-                                        repository = repository,
-                                        topPadding = topPadding,
-                                        isProcessing = isProcessingAction,
-                                        progress = actionProgress,
-                                        progressText = actionProgressText,
-                                        onAlbumSelected = { album ->
-                                            scope.launch {
-                                                isProcessingAction = true
-                                                val total = key.images.size
-                                                val handler = activeActionHandler
-                                                val originalImagesState = key.images.map { it.id to it.albumId }
-                                                
-                                                val updatedImages = mutableListOf<com.feraxhp.gallery.model.GalleryImage>()
-                                                val successfulMoves = mutableListOf<Pair<com.feraxhp.gallery.model.GalleryImage, com.feraxhp.gallery.model.GalleryImage?>>()
-                                                
-                                                key.images.forEachIndexed { index, image ->
-                                                    actionProgress = (index + 1).toFloat() / total
-                                                    actionProgressText = "${index + 1} de $total"
-                                                    
-                                                    val movedImage = repository.moveImage(image, album.id)
-                                                    successfulMoves.add(image to movedImage)
-                                                    updatedImages.add(movedImage ?: image)
-                                                }
-                                                
-                                                val anySuccess = successfulMoves.any { it.second != null }
-                                                
-                                                if (anySuccess) {
-                                                    val newAllImages = key.allImages.map { current ->
-                                                        updatedImages.find { it.id == current.id } ?: current
-                                                    }
-                                                    
-                                                    // Actualizamos la entrada anterior en el backstack (el Detail si venía de ahí)
-                                                    if (backStack.size > 1 && backStack[backStack.size - 2] is Destination.Detail) {
-                                                        val detailDest = backStack[backStack.size - 2] as Destination.Detail
-                                                        val newCurrentImage = updatedImages.find { it.id == detailDest.image.id } ?: detailDest.image
-                                                        backStack = backStack.dropLast(1).dropLast(1) + Destination.Detail(newCurrentImage, newAllImages)
-                                                    } else {
-                                                        backStack = backStack.dropLast(1)
-                                                    }
-                                                    
-                                                    handler?.clearSelection()
-                                                    
-                                                    isProcessingAction = false
-                                                    
-                                                    snackbarHostState.currentSnackbarData?.dismiss()
-                                                    val successCount = successfulMoves.count { it.second != null }
-                                                    val snackbarMessage = if (successCount == 1) 
-                                                        "Imagen movida a ${album.name}" 
-                                                    else "$successCount imágenes movidas a ${album.name}"
-                                                    
-                                                    val result = snackbarHostState.showSnackbar(
-                                                        message = snackbarMessage,
-                                                        actionLabel = "Deshacer",
-                                                        duration = SnackbarDuration.Short
-                                                    )
-                                                    
-                                                    if (result == SnackbarResult.ActionPerformed) {
-                                                        successfulMoves.filter { it.second != null }.forEach { (originalImage, movedImage) ->
-                                                            val originalAlbumId = originalImagesState.find { it.first == originalImage.id }?.second
-                                                            if (originalAlbumId != null && movedImage != null) {
-                                                                repository.moveImage(movedImage, originalAlbumId)
-                                                            }
-                                                        }
-                                                        snackbarHostState.showSnackbar("Movimiento cancelado")
-                                                    }
-                                                } else {
-                                                    isProcessingAction = false
-                                                    snackbarHostState.currentSnackbarData?.dismiss()
-                                                    snackbarHostState.showSnackbar("Error al mover")
-                                                    if (backStack.size > 1) {
-                                                        backStack = backStack.dropLast(1)
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    )
                 }
             }
         }

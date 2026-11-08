@@ -54,15 +54,25 @@ import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.painterResource
 import kotlin.time.Duration.Companion.milliseconds
 
-@OptIn(ExperimentalSharedTransitionApi::class)
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.automirrored.filled.DriveFileMove
+
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun AlbumGalleryScreen(
     viewModel: GalleryViewModel,
     albumId: String,
+    albumName: String,
+    onBack: () -> Unit,
     onImageClick: (GalleryImage, List<GalleryImage>) -> Unit,
+    onNavigateToMoveToAlbum: (List<GalleryImage>, List<GalleryImage>) -> Unit,
+    onShareImages: (List<GalleryImage>) -> Unit,
+    onDeleteImages: (List<GalleryImage>) -> Unit,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
-    topPadding: Dp = 0.dp
 ) {
     val images by viewModel.images.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -90,37 +100,78 @@ fun AlbumGalleryScreen(
         viewModel.clearSelection()
     }
 
-    with(sharedTransitionScope) {
-        GalleryGrid(
-            images = images,
-            isLoading = isLoading,
-            isRefreshing = isRefreshing,
-            onRefresh = { viewModel.refreshGallery() },
-            onImageClick = onImageClick,
-            onToggleSelection = { viewModel.toggleSelection(it.id) },
-            onSetSelection = { image, selected -> viewModel.setSelection(image.id, selected) },
-            selectedImageIds = selectedImageIds,
-            isSelectionMode = isSelectionMode,
-            deletedImageIds = deletedImageIds,
-            isDeletedFromDetail = isDeletedFromDetail,
-            onClearDeletedState = { viewModel.clearDeletedState() },
-            sharedTransitionScope = sharedTransitionScope,
-            animatedVisibilityScope = animatedVisibilityScope,
-            topPadding = topPadding,
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(cornerRadius))
-                .background(MaterialTheme.colorScheme.surface),
-            gridModifier = Modifier
-                .sharedBounds(
-                    sharedContentState = rememberSharedContentState(key = "album-$albumId"),
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    boundsTransform = { _, _ -> tween(500) },
-                    clipInOverlayDuringTransition = OverlayClip(
-                        RoundedCornerShape(cornerRadius)
+    val selectedImages = remember(selectedImageIds, images) {
+        images.filter { it.id in selectedImageIds }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { 
+                    Text(if (selectedImageIds.isNotEmpty()) "${selectedImageIds.size} seleccionadas" else albumName) 
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                ),
+                navigationIcon = {
+                    if (selectedImageIds.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.clearSelection() }) {
+                            Icon(Icons.Default.Close, contentDescription = "Cerrar selección")
+                        }
+                    } else {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás")
+                        }
+                    }
+                },
+                actions = {
+                    if (selectedImages.isNotEmpty()) {
+                        IconButton(onClick = { onShareImages(selectedImages) }) {
+                            Icon(Icons.Default.Share, contentDescription = "Compartir seleccionadas")
+                        }
+                        IconButton(onClick = { onNavigateToMoveToAlbum(selectedImages, images) }) {
+                            Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = "Mover seleccionadas")
+                        }
+                        IconButton(onClick = { onDeleteImages(selectedImages) }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Borrar seleccionadas")
+                        }
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        with(sharedTransitionScope) {
+            GalleryGrid(
+                images = images,
+                isLoading = isLoading,
+                isRefreshing = isRefreshing,
+                onRefresh = { viewModel.refreshGallery() },
+                onImageClick = onImageClick,
+                onToggleSelection = { viewModel.toggleSelection(it.id) },
+                onSetSelection = { image, selected -> viewModel.setSelection(image.id, selected) },
+                selectedImageIds = selectedImageIds,
+                isSelectionMode = isSelectionMode,
+                deletedImageIds = deletedImageIds,
+                isDeletedFromDetail = isDeletedFromDetail,
+                onClearDeletedState = { viewModel.clearDeletedState() },
+                sharedTransitionScope = sharedTransitionScope,
+                animatedVisibilityScope = animatedVisibilityScope,
+                topPadding = padding.calculateTopPadding(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(cornerRadius))
+                    .background(MaterialTheme.colorScheme.surface),
+                gridModifier = Modifier
+                    .sharedBounds(
+                        sharedContentState = rememberSharedContentState(key = "album-$albumId"),
+                        animatedVisibilityScope = animatedVisibilityScope,
+                        boundsTransform = { _, _ -> tween(500) },
+                        clipInOverlayDuringTransition = OverlayClip(
+                            RoundedCornerShape(cornerRadius)
+                        )
                     )
-                )
-                .clip(RoundedCornerShape(cornerRadius))
-        )
+                    .clip(RoundedCornerShape(cornerRadius))
+            )
+        }
     }
 }
